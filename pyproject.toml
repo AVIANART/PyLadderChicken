@@ -1,0 +1,27 @@
+[project]
+name = "pyladderchicken"
+version = "0.1.0"
+description = "A python implementation of LadderChicken"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "apscheduler>=3.11.0",
+    "fastapi>=0.115.12",
+    "frozenlist==1.6.0",
+    "hikari>=2.1.1",
+    "hikari-lightbulb>=3.0.0",
+    "hikari-miru>=4.2.0",
+    "pymysql>=1.1.1",
+    "python-dotenv>=1.1.0",
+    "pytz>=2025.2",
+    "racetime-bot>=2.2.1",
+    "sqlalchemy>=2.0.41",
+    "tenacity>=9.1.2",
+    "twitchapi>=4.5.0",
+    "uvicorn>=0.34.3",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+]
