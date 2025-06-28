@@ -337,6 +337,8 @@ def get_schedule_message(num_races: int = 10) -> str:
 
     for n, entry in enumerate(schedule):
         content += f"<t:{int(entry.time.replace(tzinfo=est).timestamp())}:f> (<t:{int(entry.time.replace(tzinfo=est).timestamp())}:R>) - **{entry.mode_obj.name}**"
+        if entry.mode_obj.archetype_obj.ladder:
+            content += " (1v1)"
         if entry.raceId != -1 and entry.raceId is not None:
             race = ac.database_service.get_race_by_id(entry.raceId)
             content += f" - {ac.racetime_service.get_raceroom_url(race.raceRoom)}"

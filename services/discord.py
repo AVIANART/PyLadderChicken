@@ -89,6 +89,6 @@ class DiscordService:
         channel = await self.bot.rest.fetch_channel(channel_id)
         if channel:
             self.logger.info(f"Sending message to channel {channel_id}: {content}")
-            await channel.send(content)
+            await channel.send(content, role_mentions=True)
         else:
             self.logger.error(f"Channel with ID {channel_id} not found.")
