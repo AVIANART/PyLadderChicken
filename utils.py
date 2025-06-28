@@ -27,7 +27,7 @@ ladder_kwargs = {
     "unlisted": False,
     "chat_message_delay": 0,
     "partitionable": False,
-    "hide_entrants": False
+    "hide_entrants": False,
 }
 
 logger = logging.getLogger("pyladderchicken")
@@ -50,7 +50,7 @@ random_post_race_messages = [
     "Oh course I did X when I should have done Y.",
     "What a rude seed.",
     "Sword go mode sucks.",
-    "I should learn glitches..."
+    "I should learn glitches...",
 ]
 
 
@@ -75,8 +75,8 @@ async def open_race_room(race_id: int):
     race_kwargs = ladder_kwargs.copy()
 
     if race.mode_obj.archetype_obj.ladder:
-        race_kwargs['goal'] = f"Beat The Game (1v1)"
-        race_kwargs['partitionable'] = True
+        race_kwargs["goal"] = f"Beat The Game (1v1)"
+        race_kwargs["partitionable"] = True
         # race_kwargs['hide_entrants'] = True
 
     room_name = await ac.racetime_service.start_race(
@@ -91,8 +91,7 @@ async def open_race_room(race_id: int):
         if race.mode_obj.archetype_obj.ladder:
             message += f"\n**This is a 1v1 ladder race using the partitioning system in rt.gg**"
         await ac.discord_service.send_message(
-            content=message,
-            channel_id=races_channel_id
+            content=message, channel_id=races_channel_id
         )
 
     ac.database_service.add_fired_race(room_name, race)
@@ -143,6 +142,18 @@ async def roll_seed(race_id: int):
     else:
         logger.error(f"No handler found for room: {room_name}")
 
+    updated_race = ac.database_service.update_race_seed(
+        race.raceId, seed_info.response.hash
+    )
+
+    if not updated_race:
+        logger.error(
+            f"Failed to update race {race.raceId} with seed ID {seed_info.response.hash}."
+        )
+        await ac.discord_service.send_message(
+            content=f"Failed to update race {race.raceId} with seed ID {seed_info.response.hash}."
+        )
+
     await ac.discord_service.send_message(
         content=f"Seed for race {race.raceId}: https://avianart.games/perm/{seed_info.response.hash} (https://alttpr.racing/getseed.php?race={race.raceId})",
     )
@@ -151,7 +162,9 @@ async def roll_seed(race_id: int):
 
     racers = race_handler.data.get("entrants", [])
     savior_message = None
-    if (not race.mode_obj.archetype_obj.ladder and len(racers) == 1) or (race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1):
+    if (not race.mode_obj.archetype_obj.ladder and len(racers) == 1) or (
+        race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1
+    ):
         savior_roles = ac.database_service.get_savior_roles(
             race.mode_obj.archetype_obj.id
         )
@@ -164,8 +177,9 @@ async def roll_seed(race_id: int):
 
     if savior_message:
         await ac.discord_service.send_message(
-                content=savior_message,
-            )
+            content=savior_message,
+        )
+
 
 async def ping_unready(race_id: int):
     """
@@ -205,7 +219,9 @@ async def warn_partitioned_race(race_id: int):
     race = ac.database_service.get_scheduled_race_by_id(race_id)
 
     if not race.raceId:
-        logger.error(f"Cannot warn partitioned race! Race {race.id} does not have a race room.")
+        logger.error(
+            f"Cannot warn partitioned race! Race {race.id} does not have a race room."
+        )
         return
 
     room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
@@ -230,7 +246,9 @@ async def warn_partitioned_race(race_id: int):
     )
 
 
-async def force_start_race(race_id: int = None, race_room: str = None, ladder: bool = False):
+async def force_start_race(
+    race_id: int = None, race_room: str = None, ladder: bool = False
+):
     """
     Forces the start of the race in the Discord channel and racetime.
     """
@@ -246,7 +264,9 @@ async def force_start_race(race_id: int = None, race_room: str = None, ladder: b
         room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
     elif race_room and ladder:
         room_name = race_room.lstrip("/")
-        race = ac.database_service.get_partitioned_race_by_room_name(room_name).parentRace.scheduledRace
+        race = ac.database_service.get_partitioned_race_by_room_name(
+            room_name
+        ).parentRace.scheduledRace
 
     retry_count = 0
     while retry_count < 10:
@@ -263,10 +283,13 @@ async def force_start_race(race_id: int = None, race_room: str = None, ladder: b
 
     ready = 0
     for entrant in race_handler.data.get("entrants", []):
-        if entrant["status"] == "ready":
+        if entrant["status"]["value"] == "ready":
             ready += 1
 
-    if (ready < 2 and not race.mode_obj.archetype_obj.ladder) or ((len(race_handler.data.get("entrants", [])) < 2) and race.mode_obj.archetype_obj.ladder):
+    if (ready < 2 and not race.mode_obj.archetype_obj.ladder) or (
+        (len(race_handler.data.get("entrants", [])) < 2)
+        and race.mode_obj.archetype_obj.ladder
+    ):
         logger.error(
             f"Not enough ready players to force start race {race.id}. Cancelling."
         )
@@ -295,13 +318,12 @@ async def force_start_race(race_id: int = None, race_room: str = None, ladder: b
     if post_race_channel_id:
         await ac.discord_service.send_message(
             channel_id=post_race_channel_id,
-            content=f"==================== ** [{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** ===================="
+            content=f"==================== ** [{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** ====================",
         )
         await ac.discord_service.send_message(
             channel_id=post_race_channel_id,
-            content=f"_Please remember to use spoiler tags (`||`{random.choice(random_post_race_messages)}`||`) when discussing before the race is completed!_"
+            content=f"_Please remember to use spoiler tags (`||`{random.choice(random_post_race_messages)}`||`) when discussing before the race is completed!_",
         )
-
 
 
 def get_schedule_message(num_races: int = 10) -> str:

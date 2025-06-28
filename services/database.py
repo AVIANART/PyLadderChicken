@@ -276,6 +276,16 @@ class DatabaseService:
         with Session(self.engine) as db:
             race = db.query(models.Race).filter(models.Race.id == race_id).first()
             return race
+        
+    def update_race_seed(self, race_id: int, seed: str):
+        with Session(self.engine) as db:
+            race = db.query(models.Race).filter(models.Race.id == race_id).first()
+            if race:
+                race.seed = seed
+                db.commit()
+                db.refresh(race)
+                return race
+            return None
 
     def add_savior_role(self, savior_role: schemas.SaviorRoleWrite):
         with Session(self.engine) as db:
