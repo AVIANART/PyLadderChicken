@@ -142,7 +142,7 @@ class ScheduledRace(Base):
 class Setting(Base):
     __tablename__ = "setting"
     name: Mapped[str] = mapped_column(
-        Text, primary_key=True, index=True, nullable=False
+        TEXT, primary_key=True, index=True, nullable=False
     )
     value: Mapped[str] = mapped_column(Text, nullable=False)
     type: Mapped[str] = mapped_column(Text, nullable=False, index=True)
