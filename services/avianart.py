@@ -79,7 +79,6 @@ class AvianartService:
     def __init__(self, url: str, api_key: str):
         self.url = url
         self.api_key = api_key
-        self.connection = None
         self.logger: logging.Logger = logging.getLogger("avianart")
 
     async def generate_seed(

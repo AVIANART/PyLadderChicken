@@ -19,7 +19,6 @@ class DatabaseService:
         database_password: str,
         database_name: str = "ladder",
         database_url: str = "localhost:3306",
-
     ):
         self.sqlalchemy_connection_string = f"mysql+pymysql://{database_user}:{database_password}@{database_url}/{database_name}"
 
@@ -63,15 +62,21 @@ class DatabaseService:
                     setting.type = "str"
             else:
                 if type(value) == int:
-                    setting = schemas.SettingWrite(name=key, value=str(value), type="int")
+                    setting = schemas.SettingWrite(
+                        name=key, value=str(value), type="int"
+                    )
                 elif type(value) == float:
-                    setting = schemas.SettingWrite(name=key, value=str(value), type="float")
+                    setting = schemas.SettingWrite(
+                        name=key, value=str(value), type="float"
+                    )
                 elif type(value) == bool:
                     setting = schemas.SettingWrite(
                         name=key, value="true" if value else "false", type="bool"
                     )
                 else:
-                    setting = schemas.SettingWrite(name=key, value=str(value), type="str")
+                    setting = schemas.SettingWrite(
+                        name=key, value=str(value), type="str"
+                    )
                 setting = models.Setting(**setting.model_dump())
             db.add(setting)
             db.commit()
@@ -115,6 +120,49 @@ class DatabaseService:
             )
             return next_race
 
+    def get_race_by_room_name(self, room_name: str):
+        if not room_name.startswith("/"):
+            room_name = f"/{room_name}"
+
+        with Session(self.engine) as db:
+            race = (
+                db.query(models.Race)
+                .options(
+                    selectinload(models.Race.scheduledRace)
+                    .selectinload(models.ScheduledRace.mode_obj)
+                    .selectinload(models.Mode.archetype_obj)
+                )
+                .filter(models.Race.raceRoom == room_name)
+                .first()
+            )
+            return race
+
+    def add_partitioned_race(self, partitioned_race: schemas.PartitionedRaceWrite):
+        with Session(self.engine) as db:
+            if not partitioned_race.raceRoom.startswith("/"):
+                partitioned_race.raceRoom = f"/{partitioned_race.raceRoom}"
+            db_partitioned_race = models.PartitionedRace(**partitioned_race.model_dump())
+            db.add(db_partitioned_race)
+            db.commit()
+            db.refresh(db_partitioned_race)
+            return db_partitioned_race
+        
+    def get_partitioned_race_by_room_name(self, room_name: str):
+        if not room_name.startswith("/"):
+            room_name = f"/{room_name}"
+        with Session(self.engine) as db:
+            partitioned_race = (
+                db.query(models.PartitionedRace)
+                .options(selectinload(models.PartitionedRace.parentRace)
+                    .selectinload(models.Race.scheduledRace)
+                    .selectinload(models.ScheduledRace.mode_obj)
+                    .selectinload(models.Mode.archetype_obj)
+                )
+                .filter(models.PartitionedRace.raceRoom == room_name)
+                .first()
+            )
+            return partitioned_race
+
     def get_previous_race(self, mins_before_start: int = 30):
         with Session(self.engine) as db:
             previous_race = (
@@ -142,11 +190,9 @@ class DatabaseService:
                 .all()
             )
             default_role = (
-                db.query(models.Role)
-                .filter(models.Role.roleName == 'all')
-                .first()
+                db.query(models.Role).filter(models.Role.roleName == "all").first()
             )
-        
+
             all_roles = [role.role for role in roles]
             if default_role and default_role not in all_roles:
                 all_roles.append(default_role)
@@ -274,7 +320,7 @@ class DatabaseService:
                 .first()
             )
             return mode
-        
+
     @functools.cache
     def get_modes(self):
         with Session(self.engine) as db:
@@ -291,9 +337,11 @@ class DatabaseService:
             archetypes = (
                 db.query(models.Archetype)
                 .options(selectinload(models.Archetype.modes))
-                .options(selectinload(models.Archetype.saviorRoles).selectinload(
-                    models.SaviorRole.role
-                ))
+                .options(
+                    selectinload(models.Archetype.saviorRoles).selectinload(
+                        models.SaviorRole.role
+                    )
+                )
                 .all()
             )
             return archetypes

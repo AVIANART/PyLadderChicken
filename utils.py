@@ -1,5 +1,6 @@
 import asyncio
 import random
+from typing import TYPE_CHECKING
 import zoneinfo
 import datetime
 
@@ -7,8 +8,10 @@ import datetime
 import logging
 
 from services.avianart import AvianResponsePayload
-from services.racetime import LadderRaceHandler
 import app_context as ac
+
+if TYPE_CHECKING:
+    from services.racetime import LadderRaceHandler
 
 
 ladder_kwargs = {
@@ -23,6 +26,8 @@ ladder_kwargs = {
     "streaming_required": True,
     "unlisted": False,
     "chat_message_delay": 0,
+    "partitionable": False,
+    "hide_entrants": False
 }
 
 logger = logging.getLogger("pyladderchicken")
@@ -67,15 +72,28 @@ async def open_race_room(race_id: int):
     for role in ping_roles:
         roles_str += f"<@&{role.roleId}> "
 
+    race_kwargs = ladder_kwargs.copy()
+
+    if race.mode_obj.archetype_obj.ladder:
+        race_kwargs['goal'] = f"Beat The Game (1v1)"
+        race_kwargs['partitionable'] = True
+        # race_kwargs['hide_entrants'] = True
+
     room_name = await ac.racetime_service.start_race(
         # We use info_user because it will be concatenated with info_bot later
         info_user=f"Step Ladder Series - [{race.mode_obj.archetype_obj.name}] - {race.mode_obj.name}",
-        **ladder_kwargs,
+        **race_kwargs,
     )
 
-    await ac.discord_service.send_message(
-        content=f"{roles_str}- **[{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)} -- <t:{int(delta_ts)}:R>",
-    )
+    races_channel_id = ac.database_service.get_setting("races_channel_id")
+    if races_channel_id:
+        message = f"{roles_str}\n**[{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)} -- <t:{int(delta_ts)}:R>"
+        if race.mode_obj.archetype_obj.ladder:
+            message += f"\n**This is a 1v1 ladder race using the partitioning system in rt.gg**"
+        await ac.discord_service.send_message(
+            content=message,
+            channel_id=races_channel_id
+        )
 
     ac.database_service.add_fired_race(room_name, race)
     await update_schedule_message()
@@ -86,7 +104,6 @@ async def roll_seed(race_id: int):
     """
     Rolls a seed for the given slug and namespace.
     """
-    await ac.discord_service.send_message("Rolling seed...")
     race = ac.database_service.get_scheduled_race_by_id(race_id)
 
     if not race.raceId:
@@ -130,18 +147,25 @@ async def roll_seed(race_id: int):
         content=f"Seed for race {race.raceId}: https://avianart.games/perm/{seed_info.response.hash} (https://alttpr.racing/getseed.php?race={race.raceId})",
     )
 
+    # TODO: Supress embeds
+
     racers = race_handler.data.get("entrants", [])
-    if len(racers) == 1:
+    savior_message = None
+    if (not race.mode_obj.archetype_obj.ladder and len(racers) == 1) or (race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1):
         savior_roles = ac.database_service.get_savior_roles(
             race.mode_obj.archetype_obj.id
         )
         logger.debug(f"Only one racer found, pinging savior role(s).")
         if savior_roles:
             roles_str = " ".join([f"<@&{role.roleId}>" for role in savior_roles])
-            await ac.discord_service.send_message(
-                content=f"{roles_str} - **{race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}",
-            )
+        savior_message = f"{roles_str} - There is only one racer for the following race!\n**{race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}"
+        if race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1:
+            savior_message = f"{roles_str} - This is a ladder race and there are an odd number of entrants!\n**{race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}"
 
+    if savior_message:
+        await ac.discord_service.send_message(
+                content=savior_message,
+            )
 
 async def ping_unready(race_id: int):
     """
@@ -168,27 +192,62 @@ async def ping_unready(race_id: int):
         room_name, None
     )
 
-    await ac.discord_service.send_message(
-        content=f"Pinging @unready in racetime room {room_name}."
-    )
     await race_handler.send_message(
         "@unready Race starting in less than a minute! Ready up or you will be removed!"
     )
 
 
-async def force_start_race(race_id: int):
+async def warn_partitioned_race(race_id: int):
     """
-    Forces the start of the race in the Discord channel and racetime.
+    Warn users that the race is about to be partitioned.
     """
 
     race = ac.database_service.get_scheduled_race_by_id(race_id)
 
     if not race.raceId:
-        logger.error(
-            f"Cannot force start race! Race {race.id} does not have a race room."
-        )
+        logger.error(f"Cannot warn partitioned race! Race {race.id} does not have a race room.")
         return
+
     room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+    retry_count = 0
+    while retry_count < 10:
+        if room_name not in ac.racetime_service.handlers:
+            logger.error(f"Room {room_name} not found in handlers, retrying...")
+            await asyncio.sleep(5)
+            retry_count += 1
+            continue
+        break
+
+    race_handler: LadderRaceHandler = ac.racetime_service.handler_objects.get(
+        room_name, None
+    )
+
+    await race_handler.send_message(
+        "@entrants Race is about to be partitioned! You will have ~2 minutes to ready up in the partitioned room or you will be disqualified!"
+    )
+    await race_handler.send_message(
+        "If there are an odd number of entrants at the time of partitioning, the last entrant to join will be removed automatically."
+    )
+
+
+async def force_start_race(race_id: int = None, race_room: str = None, ladder: bool = False):
+    """
+    Forces the start of the race in the Discord channel and racetime.
+    """
+
+    if not race_room and not ladder:
+        race = ac.database_service.get_scheduled_race_by_id(race_id)
+
+        if not race.raceId:
+            logger.error(
+                f"Cannot force start race! Race {race.id} does not have a race room."
+            )
+            return
+        room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+    elif race_room and ladder:
+        room_name = race_room.lstrip("/")
+        race = ac.database_service.get_partitioned_race_by_room_name(room_name).parentRace.scheduledRace
+
     retry_count = 0
     while retry_count < 10:
         if room_name not in ac.racetime_service.handlers:
@@ -207,7 +266,7 @@ async def force_start_race(race_id: int):
         if entrant["status"] == "ready":
             ready += 1
 
-    if ready < 2:
+    if (ready < 2 and not race.mode_obj.archetype_obj.ladder) or ((len(race_handler.data.get("entrants", [])) < 2) and race.mode_obj.archetype_obj.ladder):
         logger.error(
             f"Not enough ready players to force start race {race.id}. Cancelling."
         )
@@ -298,7 +357,7 @@ async def schedule_future_races() -> None:
     for race in future_races:
         for job in race_jobs:
             if f"{job}{race.id}" not in scheduled_jobs:
-                ac.scheduler_service.schedule_ladder_race(race.id)
+                ac.scheduler_service.schedule_race(race.id)
     logger.info("All future races have been scheduled.")
     await update_schedule_message()
 

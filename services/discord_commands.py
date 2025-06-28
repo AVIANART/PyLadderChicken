@@ -28,7 +28,6 @@ async def autocomplete_modes(ctx: lightbulb.AutocompleteContext[str]) -> None:
             for name, value in options.items()
             if current_value.lower() in name.lower()
         }
-    logger.debug(f"Autocomplete options: {options}")
     # Limit to 25 options, discord limit
     options = dict(list(options.items())[:25])
     await ctx.respond(options)
@@ -45,7 +44,6 @@ async def autocomplete_archetypes(ctx: lightbulb.AutocompleteContext[str]) -> No
             for name, value in options.items()
             if current_value.lower() in name.lower()
         }
-    logger.debug(f"Autocomplete options: {options}")
     options = dict(list(options.items())[:25])
     await ctx.respond(options)
 
@@ -157,7 +155,7 @@ class AddScheduledRaceCommand(
         )
         new_race = ac.database_service.add_race_to_schedule(new_race)
 
-        ac.scheduler_service.schedule_ladder_race(
+        ac.scheduler_service.schedule_race(
             new_race.id, open_mins_before_start=results["mins_before_start"]
         )
         modes = {mode.id: mode.name for mode in ac.database_service.get_modes()}
@@ -190,6 +188,31 @@ class SetPostRaceChannelCommand(
 
         ac.database_service.set_setting("post_race_channel_id", results["channel"])
         await ctx.respond(f"Set post-race channel to <#{results['channel']}>.")
+
+
+@loader.command()
+class SetRacesChannelCommand(
+    lightbulb.SlashCommand,
+    name="set_races_channel",
+    description="Set the channel to send race updates.",
+):
+    channel = lightbulb.channel(
+        "channel",
+        "The channel to send race updates.",
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {
+            "channel": None,
+        }
+
+        for option in ctx.interaction.options:
+            results[option.name] = option.value
+
+        ac.database_service.set_setting("races_channel_id", results["channel"])
+        await ctx.respond(f"Set races channel to <#{results['channel']}>.")
+
 
 
 @loader.command()

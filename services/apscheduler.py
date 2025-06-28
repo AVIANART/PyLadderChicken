@@ -19,7 +19,7 @@ executors = {
     "default": AsyncIOExecutor(),
 }
 
-job_defaults = {"coalesce": True, "max_instances": 3}
+job_defaults = {"coalesce": True, "max_instances": 1}
 utc = zoneinfo.ZoneInfo("UTC")
 est = zoneinfo.ZoneInfo("US/Eastern")  # Eastern Standard Time (EST) timezone
 
@@ -77,7 +77,7 @@ class APSchedulerService:
         )
         return scheduler
 
-    def schedule_ladder_race(
+    def schedule_race(
         self, race_id=None, immediate=False, open_mins_before_start=30
     ):
         # This will schedule all parts needed for a ladder race to run
@@ -115,7 +115,6 @@ class APSchedulerService:
                     - datetime.timedelta(minutes=open_mins_before_start)
                 )
             ).seconds),
-            max_instances=1
         )
 
         self.scheduler.add_job(
@@ -134,29 +133,51 @@ class APSchedulerService:
                     race_utc_datetime - datetime.timedelta(minutes=10)
                 )
             ).seconds),
-            max_instances=1
         )
 
-        self.scheduler.add_job(
-            utils.ping_unready,
-            trigger=DateTrigger(
-                race_utc_datetime - datetime.timedelta(minutes=1),
-                timezone=utc,
-            ),
-            args=(race_id,),
-            id=f"ping_unready_{race_id}",
-            replace_existing=True,
-            max_instances=1
-        )
+        if not race.mode_obj.archetype_obj.ladder:
+            self.scheduler.add_job(
+                utils.ping_unready,
+                trigger=DateTrigger(
+                    race_utc_datetime - datetime.timedelta(minutes=1),
+                    timezone=utc,
+                ),
+                args=(race_id,),
+                id=f"ping_unready_{race_id}",
+                replace_existing=True,
+            )
 
-        self.scheduler.add_job(
-            utils.force_start_race,
-            trigger=DateTrigger(
-                race_utc_datetime - datetime.timedelta(seconds=15),
-                timezone=utc,
-            ),
-            args=(race_id,),
-            id=f"force_start_{race_id}",
-            replace_existing=True,
-            max_instances=1
-        )
+            self.scheduler.add_job(
+                utils.force_start_race,
+                trigger=DateTrigger(
+                    race_utc_datetime - datetime.timedelta(seconds=15),
+                    timezone=utc,
+                ),
+                kwargs={"race_id": race_id},
+                id=f"force_start_{race_id}",
+                replace_existing=True,
+            )
+        else:
+            self.scheduler.add_job(
+                utils.warn_partitioned_race,
+                trigger=DateTrigger(
+                    race_utc_datetime - datetime.timedelta(minutes=3),
+                    timezone=utc,
+                ),
+                kwargs={"race_id": race_id},
+                id=f"warn_partitioned_{race_id}",
+                replace_existing=True,
+            )
+
+            self.scheduler.add_job(
+                utils.force_start_race,
+                trigger=DateTrigger(
+                    race_utc_datetime - datetime.timedelta(minutes=2),
+                    timezone=utc,
+                ),
+                args=(race_id,),
+                id=f"force_start_{race_id}",
+                replace_existing=True,
+            )
+
+

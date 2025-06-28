@@ -39,6 +39,13 @@ class RaceRead(BaseModel):
     class Config:
         from_attributes = True
 
+class PartitionedRaceWrite(BaseModel):
+    raceId: int
+    raceRoom: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 
 class ScheduledRaceRead(BaseModel):
     id: int

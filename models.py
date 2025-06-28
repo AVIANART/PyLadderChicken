@@ -11,6 +11,8 @@ class Archetype(Base):
     __tablename__ = "archetypes"
     id: Mapped[int] = mapped_column(TINYINT, primary_key=True)
     name: Mapped[str] = mapped_column(TEXT, nullable=False)
+    active: Mapped[Optional[bool]] = mapped_column(BIT, nullable=True, default=True)
+    ladder: Mapped[Optional[bool]] = mapped_column(BIT, nullable=True, default=False)
 
     modes: Mapped[List["Mode"]] = relationship(
         back_populates="archetype_obj",
@@ -49,7 +51,23 @@ class Race(Base):
     raceRoom: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
     seed: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
 
-    scheduledRace: Mapped[List["ScheduledRace"]] = relationship(back_populates="race")
+    scheduledRace: Mapped["ScheduledRace"] = relationship(back_populates="race")
+    partitionedRaces: Mapped[List["PartitionedRace"]] = relationship(
+        back_populates="parentRace",
+    )
+
+
+class PartitionedRace(Base):
+    __tablename__ = "partitionedRaces"
+    id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
+    raceId: Mapped[int] = mapped_column(BIGINT, ForeignKey("races.id"), nullable=False)
+    raceRoom: Mapped[Optional[str]] = mapped_column(
+        TEXT, nullable=True, unique=True, index=True
+    )
+
+    parentRace: Mapped[Optional["Race"]] = relationship(
+        back_populates="partitionedRaces"
+    )
 
 
 class Role(Base):
