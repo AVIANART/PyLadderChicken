@@ -10,7 +10,7 @@ MMMM_GEN_BODY = [
     {
         "preset": "notslow",
         "force": ["logic:noglitches"],
-        "veto": ["bombbag:on"],
+        "veto": ["bombbag:on","timer:timed-ohko"],
         "race": True,
     }
 ]
