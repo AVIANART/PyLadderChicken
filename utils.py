@@ -86,13 +86,16 @@ async def open_race_room(race_id: int):
     )
 
     races_channel_id = ac.database_service.get_setting("races_channel_id")
+    message = f"{roles_str}\n**[{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)} -- <t:{int(delta_ts)}:R>"
+    if race.mode_obj.archetype_obj.ladder:
+        message += (
+            f"\n**This is a 1v1 ladder race using the partitioning system in rt.gg**"
+        )
     if races_channel_id:
-        message = f"{roles_str}\n**[{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)} -- <t:{int(delta_ts)}:R>"
-        if race.mode_obj.archetype_obj.ladder:
-            message += f"\n**This is a 1v1 ladder race using the partitioning system in rt.gg**"
         await ac.discord_service.send_message(
             content=message, channel_id=races_channel_id
         )
+    await ac.discord_service.send_message(content=message)
 
     ac.database_service.add_fired_race(room_name, race)
     await update_schedule_message()
@@ -174,10 +177,11 @@ async def roll_seed(race_id: int):
         savior_message = f"{roles_str} - There is only one racer for the following race!\n**{race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}"
         if race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1:
             savior_message = f"{roles_str} - This is a ladder race and there are an odd number of entrants!\n**{race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}"
+    races_channel_id = ac.database_service.get_setting("races_channel_id")
 
-    if savior_message:
+    if races_channel_id and savior_message:
         await ac.discord_service.send_message(
-            content=savior_message,
+            content=savior_message, channel_id=races_channel_id
         )
 
 
@@ -302,9 +306,7 @@ async def force_start_race(
         await race_handler.cancel_race()
         return
 
-    await ac.discord_service.send_message(
-        content=f"Force starting race in racetime room {room_name}."
-    )
+
     await race_handler.send_message("Force starting race! Get ready!")
     try:
         await race_handler.force_start()
