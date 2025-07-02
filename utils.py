@@ -251,7 +251,7 @@ async def warn_partitioned_race(race_id: int):
 
 
 async def force_start_race(
-    race_id: int = None, race_room: str = None, ladder: bool = False
+    race_id: int = None, race_room: str = None, ladder: bool = False, suppress_post_race_message: bool = False
 ):
     """
     Forces the start of the race in the Discord channel and racetime.
@@ -262,7 +262,7 @@ async def force_start_race(
 
         if not race.raceId:
             logger.error(
-                f"Cannot force start race! Race {race.id} does not have a race room."
+                f"Cannot force start race! Race {race.raceId} does not have a race room."
             )
             return
         room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
@@ -295,10 +295,10 @@ async def force_start_race(
         and race.mode_obj.archetype_obj.ladder
     ):
         logger.error(
-            f"Not enough ready players to force start race {race.id}. Cancelling."
+            f"Not enough ready players to force start race {race.raceId}. Cancelling."
         )
         await ac.discord_service.send_message(
-            content=f"Not enough ready players to force start race {race.id}. Cancelling."
+            content=f"Not enough ready players to force start race {race.raceId}. Cancelling."
         )
         await race_handler.send_message(
             "Not enough ready players to start the race! Race cancelled."
@@ -311,13 +311,13 @@ async def force_start_race(
     try:
         await race_handler.force_start()
     except Exception as e:
-        logger.error(f"Failed to force start race {race.id}: {e}")
+        logger.error(f"Failed to force start race {race.raceId}: {e}")
         await ac.discord_service.send_message(
-            content=f"Failed to force start race {race.id}: {e}"
+            content=f"Failed to force start race {race.raceId}: {e}"
         )
     post_race_channel_id = ac.database_service.get_setting("post_race_channel_id")
 
-    if post_race_channel_id:
+    if post_race_channel_id and not suppress_post_race_message:
         await ac.discord_service.send_message(
             channel_id=post_race_channel_id,
             content=f"==================== ** [{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** ====================",
