@@ -69,7 +69,7 @@ class DiscordService:
         else:
             self.logger.info("Discord bot is not running.")
 
-    async def send_message(self, content: str, channel_id: int = None):
+    async def send_message(self, content: str, channel_id: int = None, force_mention: bool = False):
         """
         Sends a message to a specific channel.
 
@@ -81,7 +81,7 @@ class DiscordService:
         role_mentions = True
         if not channel_id:
             bot_logging_channel = ac.database_service.get_setting("bot_logging_channel_id")
-            role_mentions = False
+            role_mentions = force_mention
             if not bot_logging_channel:
                 self.logger.error(
                     "No channel ID provided and no update channel configured."
