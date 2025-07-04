@@ -371,16 +371,19 @@ async def schedule_future_races() -> None:
     future_races = ac.database_service.get_future_scheduled_races()
     scheduled_jobs = set([x.id for x in ac.scheduler_service.scheduler.get_jobs()])
 
-    race_jobs = [
+    _race_jobs = [
         "open_race_",
         "roll_seed_",
-        "ping_unready_",
         "force_start_",
     ]
 
     # For each job, check that all scheduled components exist, if one missing, schedule the whole race
     logger.info("Scheduling future races...")
     for race in future_races:
+        if race.mode_obj.archetype_obj.ladder:
+            race_jobs = _race_jobs.copy() + ['warn_partitioned_']
+        else:
+            race_jobs = _race_jobs.copy() + ['ping_unready_']
         for job in race_jobs:
             if f"{job}{race.id}" not in scheduled_jobs:
                 ac.scheduler_service.schedule_race(race.id)
