@@ -122,7 +122,7 @@ class LadderRaceHandler(RaceHandler):
                         race_utc_datetime - datetime.timedelta(seconds=15),
                         timezone=utc,
                     ),
-                    kwargs={"race_room": self.data.get("name"), "ladder": True},
+                    kwargs={"race_room": self.data.get("name"), "ladder": True, "suppress_post_race_message": True},
                     id=f"force_start_{scheduled_race.raceId}_p{self.data.get('name')}",
                     replace_existing=True,
                 )
