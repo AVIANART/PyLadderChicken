@@ -25,6 +25,22 @@ class LadderRaceHandler(RaceHandler):
         self.partitioned_race = None
         super().__init__(**kwargs)
 
+    async def override_stream(self, user_id):
+        await self.ws.send(json.dumps({
+            "action": "override_stream",
+            "data": {
+                "user": user_id
+            }
+        }))
+
+    async def ex_so(self, args, message):
+        racers = {x['user']['id']: x for x in self.data['entrants']}
+        if message['user']['id'] in racers and not racers[message['user']['id']].get('stream_override', False):
+            await self.override_stream(message['user']['id'])
+            await ac.discord_service.send_message(
+                f"{message['user']['full_name']} ({message['user']['twitch_channel']}) has activated stream override ({ac.racetime_service.get_raceroom_url(self.data.get('name'))})", suppress_embeds=True)
+
+
     async def chat_history(self, data):
         """
         Handle incoming chat history messages.
