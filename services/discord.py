@@ -1,4 +1,4 @@
-from hikari import GatewayBot, Intents, StartedEvent, MessageCreateEvent, StartingEvent
+from hikari import GatewayBot, Intents, StartedEvent, MessageCreateEvent, StartingEvent, undefined, messages
 import app_context as ac
 import lightbulb
 import logging
@@ -69,7 +69,7 @@ class DiscordService:
         else:
             self.logger.info("Discord bot is not running.")
 
-    async def send_message(self, content: str, channel_id: int = None, force_mention: bool = False):
+    async def send_message(self, content: str, channel_id: int = None, force_mention: bool = False, suppress_embeds: bool = False):
         """
         Sends a message to a specific channel.
 
@@ -91,6 +91,6 @@ class DiscordService:
         channel = await self.bot.rest.fetch_channel(channel_id)
         if channel:
             self.logger.info(f"Sending message to channel {channel_id}: {content}")
-            await channel.send(content, role_mentions=role_mentions)
+            await channel.send(content, role_mentions=role_mentions, flags=messages.MessageFlag.SUPPRESS_EMBEDS if suppress_embeds else undefined.UNDEFINED)
         else:
             self.logger.error(f"Channel with ID {channel_id} not found.")

@@ -159,6 +159,7 @@ async def roll_seed(race_id: int):
 
     await ac.discord_service.send_message(
         content=f"Seed for race {race.raceId}: https://avianart.games/perm/{seed_info.response.hash} (https://alttpr.racing/getseed.php?race={race.raceId})",
+        suppress_embeds=True
     )
 
     # TODO: Supress embeds
@@ -424,5 +425,5 @@ def convert_hash(hash_str: str) -> str:
         "Key": "Big Key",
     }
     hash_list = hash_str.split(", ")
-    hash_str = "/".join([hash_conversions.get(item, item) for item in hash_list])
+    hash_str = "/".join([f'Hash{hash_conversions.get(item, item).replace(" ", "")}' for item in hash_list])
     return hash_str
