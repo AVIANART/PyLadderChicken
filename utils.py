@@ -135,10 +135,10 @@ async def roll_seed(race_id: int):
     )
 
     if race_handler:
-        await race_handler.send_message(
-            f"Here is your seed: https://alttpr.racing/getseed.php?race={race.raceId}"
-        )
         hash_str = seed_response_to_hash(seed_info.response)
+        await race_handler.send_message(
+            f"Here is your seed: https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
+        )
         await race_handler.set_bot_raceinfo(
             f"{race.mode_obj.slug} - https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
         )

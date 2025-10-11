@@ -60,6 +60,7 @@ class AvianResponsePayload:
     meta: Optional[Meta] = None
     fshash: Optional[str] = None
     starttime: Optional[int] = None
+    gentime: Optional[int] = None
     type: Optional[str] = None
     bps_t0_p1: Optional[str] = None
     returnCode: Optional[int] = None
