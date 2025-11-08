@@ -8,10 +8,39 @@ import logging
 
 MMMM_GEN_BODY = [
     {
-        "preset": "notslow",
-        "force": ["logic:noglitches"],
-        "veto": ["bombbag:on","timer:timed-ohko"],
-        "race": True,
+        "preset": "custom",
+        "weights": {
+        "length": [
+            -7,
+            5
+        ],
+        "execution": [
+            -2,
+            8
+        ],
+        "familiarity": [
+            -3,
+            12
+        ],
+        "variance": [
+            -5,
+            10
+        ]
+        },
+        "force": [
+        "logic:noglitches"
+        ],
+        "veto": [
+        "bombbag:on",
+        "timer:timed-ohko",
+        "shuffle:restricted",
+        "shuffle:insanity",
+        "door_shuffle:partitioned",
+        "door_shuffle:crossed",
+        "pottery:cave",
+        "pottery:cavekeys"
+        ],
+        "race": true
     }
 ]
 
@@ -103,7 +132,7 @@ class AvianartService:
         request_body = [{"args": seed_params}]
         generation_url = f"{self.url}?action=generate&preset={preset}"
 
-        if preset == "mmmmavid23":
+        if preset == "mmmmavid23" or preset == "mmmmladder":
             request_body = MMMM_GEN_BODY
             generation_url = f"{self.url}?action=mystery"
 
