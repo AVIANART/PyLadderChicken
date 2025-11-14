@@ -1,4 +1,5 @@
 import schemas
+from services.racetime import LadderRaceHandler
 import utils
 import zoneinfo
 import logging
@@ -38,6 +39,20 @@ async def autocomplete_archetypes(ctx: lightbulb.AutocompleteContext[str]) -> No
     archetypes = ac.database_service.get_archetypes()
 
     options = {archetype.name: str(archetype.id) for archetype in archetypes}
+    if current_value:
+        options = {
+            name: value
+            for name, value in options.items()
+            if current_value.lower() in name.lower()
+        }
+    options = dict(list(options.items())[:25])
+    await ctx.respond(options)
+
+async def autocomplete_races(ctx: lightbulb.AutocompleteContext[str]) -> None:
+    current_value: str = ctx.focused.value or ""
+    latest_races = ac.database_service.get_latest_races()
+
+    options = {f'[{race.scheduledRace.mode_obj.name}] {race.raceRoom} - ID: {race.id}': str(race.id) for race in latest_races}
     if current_value:
         options = {
             name: value
@@ -238,6 +253,28 @@ class SetBotLoggingChannelCommand(
         ac.database_service.set_setting("bot_logging_channel_id", results["channel"])
         await ctx.respond(f"Set bot logging channel to <#{results['channel']}>.")
 
+@loader.command()
+class SetAdminRoleCommand(
+    lightbulb.SlashCommand,
+    name="set_admin_role",
+    description="Set the admin role for the bot.",
+):
+    role = lightbulb.mentionable(
+        "role",
+        "The role to set as the admin role.",
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {
+            "role": None,
+        }
+
+        for option in ctx.interaction.options:
+            results[option.name] = option.value
+
+        ac.database_service.set_setting("admin_role_id", str(results["role"]))
+        await ctx.respond(f"Set admin role to <@&{results['role']}>.")
 
 @loader.command()
 class ScheduleCommand(
@@ -308,6 +345,115 @@ class ScheduleCommand(
                 ephemeral=True,
             )
         await utils.update_schedule_message()
+
+@loader.command()
+class DelayRaceCommand(
+    lightbulb.SlashCommand,
+    name="delay_race",
+    description="Delay the start of a specific race.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    race_id = lightbulb.integer(
+        "race_id",
+        "The ID of the race to delay.",
+        autocomplete=autocomplete_races,
+    )
+    delay_minutes = lightbulb.integer(
+        "delay_minutes",
+        "The number of minutes to delay the race.",
+        min_value=1,
+        default=5,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {i.name: i.value for i in ctx.interaction.options}
+        race_id = results["race_id"]
+        race = ac.database_service.get_race_by_id(race_id=race_id)
+        if not race:
+            await ctx.respond(f"Race with ID {race_id} not found.", ephemeral=True)
+            return
+        race_handler: LadderRaceHandler = ac.racetime_service.handler_objects.get(
+                race.raceRoom.lstrip("/"), None
+        )
+        if not race_handler:
+            await ctx.respond(f"Race room {race.raceRoom.lstrip('/')} not found. Has it already been closed?", ephemeral=True)
+            return
+        jobs_delayed = ac.scheduler_service.delay_race_start(race_id, results["delay_minutes"])
+        if jobs_delayed:
+            await ctx.respond(f"Delayed {jobs_delayed} jobs for race {race_id}.")
+            await race_handler.send_message(f'This race has been delayed by {results["delay_minutes"]} minutes.')
+        else:
+            await ctx.respond(f"No jobs found to delay for race {race_id}.", ephemeral=True)
+
+@loader.command()
+class SetRaceSeedCommand(
+    lightbulb.SlashCommand,
+    name="set_race_seed",
+    description="Set the seed for a specific race. LadderChicken will update the room with the seed.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    race_id = lightbulb.integer(
+        "race_id",
+        "The ID of the race to set the seed for.",
+        autocomplete=autocomplete_races,
+    )
+    seed_hash = lightbulb.string(
+        "seed_hash",
+        "The seed hash to set for the race from AVIANART (e.g. 'YMrEqPWmG9')."
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {i.name: i.value for i in ctx.interaction.options}
+        race_id = results["race_id"]
+        seed_hash = results["seed_hash"]
+        race = ac.database_service.get_race_by_id(race_id=race_id)
+        if not race:
+            await ctx.respond(f"Race with ID {race_id} not found.", ephemeral=True)
+            return
+        await ctx.defer(ephemeral=True)
+        race = ac.database_service.get_scheduled_race_by_id(race.scheduledRace.id)
+        room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+
+        seed_info = await ac.avianart_service.fetch_permalink(seed_hash)
+        if seed_info.response.status or not seed_info.response.patch:
+            await ctx.respond(f"Failed to fetch seed with hash {seed_hash}. Please ensure the seed hash is correct and the seed has been generated.")
+            return
+        
+        race_handler: LadderRaceHandler = ac.racetime_service.handler_objects.get(
+            room_name, None
+        )
+        if not race_handler:
+            await ctx.respond(f"Race room {room_name} not found. Has it already been closed?", ephemeral=True)
+            return
+        hash_str = utils.seed_response_to_hash(seed_info.response)
+        
+        await race_handler.send_message(
+            f"Here is your seed: https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
+        )
+        await race_handler.set_bot_raceinfo(
+            f"{race.mode_obj.slug} - https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
+        )
+        updated_race = ac.database_service.update_race_seed(
+            race.raceId, seed_info.response.hash
+        )
+
+        if not updated_race:
+            logger.error(
+                f"Failed to update race {race.raceId} with seed ID {seed_info.response.hash}."
+            )
+            admin_role = ac.database_service.get_setting("admin_role_id")
+            admin_ping = f"<@&{admin_role}> " if admin_role else ""
+            await ac.discord_service.send_message(
+                content=f"{admin_ping}Failed to update race {race.raceId} with seed ID {seed_info.response.hash}.",
+                force_mention=True
+            )
+        await ac.discord_service.send_message(
+            content=f"Seed for race {race.raceId}. **Manually set by {ctx.user.username}**: https://avianart.games/perm/{seed_info.response.hash} (https://alttpr.racing/getseed.php?race={race.raceId})",
+            suppress_embeds=True
+        )
+        await ctx.respond(f"Set seed for race {race.raceId} to https://avianart.games/perm/{seed_info.response.hash}.")
 
 
 @loader.command()
@@ -392,36 +538,6 @@ class SetAllSaviorRolesCommand(
             await ctx.respond(
                 f"Set savior role <@&{role_id}> for all archetypes without a role."
             )
-
-
-# class MyMenu(lightbulb.components.Menu):
-#     def __init__(self) -> None:
-#         self.modes_map = {}
-#         self.mode_select = None
-
-#         self._set_select()
-
-#     def _set_select(self):
-#         modes = ac.database_service.get_modes()
-#         self.modes_map = {
-#             f"[{mode.archetype_obj.name}] {mode.name}": mode.id for mode in modes
-#         }
-#         self.mode_select = self.add_text_select(
-#             sorted(list(self.modes_map.keys())), self.on_select
-#         )
-
-#     async def on_select(self, ctx: lightbulb.components.MenuContext) -> None:
-#         mode_id = self.modes_map.get(ctx.selected_values_for(self.mode_select)[0])
-#         if mode_id is not None:
-#             slug = ac.database_service.get_mode_by_id(mode_id).slug
-#             namespace = slug.split("/")[0] if "/" in slug else None
-#             preset = slug.split("/")[1] if "/" in slug else slug
-#             await ctx.defer(ephemeral=True, edit=True)
-#             seed = await ac.avianart_service.generate_seed(preset=preset, race=False, namespace=namespace)
-#             await ctx.respond(f"""You selected {self.mode_select} ({slug})
-#                               Seed: https://avianart.games/perm/{seed.response.hash}""", ephemeral=True, edit=True)
-#         else:
-#             await ctx.respond("Invalid mode selected.", ephemeral=True, edit=True)
 
 
 @loader.command()

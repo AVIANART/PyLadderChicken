@@ -5,6 +5,7 @@ import requests
 from typing import Optional, Dict, Any
 import logging
 
+import app_context as ac
 
 MMMM_GEN_BODY = [
     {
@@ -40,7 +41,7 @@ MMMM_GEN_BODY = [
         "pottery:cave",
         "pottery:cavekeys"
         ],
-        "race": true
+        "race": True
     }
 ]
 
@@ -140,21 +141,38 @@ class AvianartService:
             f"Request body for generation: {request_body} with preset: {preset}"
         )
 
-        generation_response = requests.post(
-            generation_url,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"{self.api_key}",
-            },
-            json=request_body,
-        )
+        admin_role = ac.database_service.get_setting("admin_role_id")
+        admin_ping = f"<@&{admin_role}> " if admin_role else ""
+
+        try:
+            generation_response = requests.post(
+                generation_url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"{self.api_key}",
+                },
+                json=request_body,
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Could not reach AVIANART: {e}"
+            )
+            await ac.discord_service.send_message(
+                content=f"{admin_ping}Could not reach AVIANART:\n```{e}```",
+            force_mention=True
+            )
+            return
 
         if generation_response.status_code != 200:
             self.logger.error(
-                f"Failed to generate seed using {namespace}/{preset}: {generation_response.text}"
+                f"Failed to trigger seed generation using {namespace}/{preset}: {generation_response.text}"
+            )
+            await ac.discord_service.send_message(
+                content=f"{admin_ping}Failed to trigger seed generation using {namespace}/{preset}:\n```{generation_response.text}```",
+            force_mention=True
             )
             raise Exception(
-                f"Failed to generate seed using {namespace}/{preset}: {generation_response.text}"
+                f"Failed to trigger seed generation using {namespace}/{preset}: {generation_response.text}"
             )
 
         seed_hash = generation_response.json()["response"].get("hash")
@@ -176,6 +194,10 @@ class AvianartService:
             )
         self.logger.error(
             f"Generation failed for seed hash: {seed_hash} with message: {status.response.message}"
+        )
+        await ac.discord_service.send_message(
+            content=f"{admin_ping}Generation failed for seed hash: {seed_hash} with message:\n```{status.response.message}```",
+            force_mention=True
         )
 
     async def fetch_permalink(self, seed_hash: str) -> AvianartGenPayload:

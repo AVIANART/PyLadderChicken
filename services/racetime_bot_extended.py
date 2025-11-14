@@ -5,6 +5,7 @@ from racetime_bot import Bot
 import aiohttp
 
 import tenacity
+import app_context as ac
 
 
 class ExtendedRacetimeBot(Bot):
@@ -58,6 +59,12 @@ class ExtendedRacetimeBot(Bot):
                     ) as response:
                         headers = response.headers
         except tenacity.RetryError as e:
+            admin_role = ac.database_service.get_setting("admin_role_id")
+            admin_ping = f"<@&{admin_role}> " if admin_role else ""
+            await ac.discord_service.send_message(
+                content=f"{admin_ping}Failed to open rt.gg room after retries: {e}\n```{e.last_attempt._exception}```",
+                force_mention=True
+            )
             self.logger.error(
                 f"Failed to open rt.gg room after retries: {e} ({e.last_attempt._exception})"
             )

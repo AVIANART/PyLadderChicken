@@ -7,6 +7,8 @@ import datetime
 import datetime
 import logging
 
+import hikari
+
 from services.avianart import AvianResponsePayload
 import app_context as ac
 
@@ -153,8 +155,11 @@ async def roll_seed(race_id: int):
         logger.error(
             f"Failed to update race {race.raceId} with seed ID {seed_info.response.hash}."
         )
+        admin_role = ac.database_service.get_setting("admin_role_id")
+        admin_ping = f"<@&{admin_role}> " if admin_role else ""
         await ac.discord_service.send_message(
-            content=f"Failed to update race {race.raceId} with seed ID {seed_info.response.hash}."
+            content=f"{admin_ping}Failed to update race {race.raceId} with seed ID {seed_info.response.hash}.",
+            force_mention=True
         )
 
     await ac.discord_service.send_message(
@@ -313,20 +318,24 @@ async def force_start_race(
         await race_handler.force_start()
     except Exception as e:
         logger.error(f"Failed to force start race {race.raceId}: {e}")
+
+        admin_role = ac.database_service.get_setting("admin_role_id")
+        admin_ping = f"<@&{admin_role}> " if admin_role else ""
+        
         await ac.discord_service.send_message(
-            content=f"Failed to force start race {race.raceId}: {e}"
+            content=f"{admin_ping}Failed to force start race {race.raceId}: {e}",
+            force_mention=True
         )
     post_race_channel_id = ac.database_service.get_setting("post_race_channel_id")
 
     if post_race_channel_id and not suppress_post_race_message:
-        await ac.discord_service.send_message(
-            channel_id=post_race_channel_id,
-            content=f"==================== ** [{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** ====================",
+        thread: hikari.GuildThreadChannel = await ac.discord_service.bot.rest.create_thread(
+            post_race_channel_id,
+            hikari.ChannelType.GUILD_PUBLIC_THREAD,
+            f"[{race.mode_obj.archetype_obj.name}] {race.mode_obj.name} - {room_name.split('/')[-1]} "
         )
-        await ac.discord_service.send_message(
-            channel_id=post_race_channel_id,
-            content=f"_Please remember to use spoiler tags (`||`{random.choice(random_post_race_messages)}`||`) when discussing before the race is completed!_",
-        )
+
+        await thread.send(f'_{random.choice(random_post_race_messages)}_')
 
 
 def get_schedule_message(num_races: int = 10) -> str:
