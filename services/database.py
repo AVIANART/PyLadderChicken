@@ -141,19 +141,22 @@ class DatabaseService:
         with Session(self.engine) as db:
             if not partitioned_race.raceRoom.startswith("/"):
                 partitioned_race.raceRoom = f"/{partitioned_race.raceRoom}"
-            db_partitioned_race = models.PartitionedRace(**partitioned_race.model_dump())
+            db_partitioned_race = models.PartitionedRace(
+                **partitioned_race.model_dump()
+            )
             db.add(db_partitioned_race)
             db.commit()
             db.refresh(db_partitioned_race)
             return db_partitioned_race
-        
+
     def get_partitioned_race_by_room_name(self, room_name: str):
         if not room_name.startswith("/"):
             room_name = f"/{room_name}"
         with Session(self.engine) as db:
             partitioned_race = (
                 db.query(models.PartitionedRace)
-                .options(selectinload(models.PartitionedRace.parentRace)
+                .options(
+                    selectinload(models.PartitionedRace.parentRace)
                     .selectinload(models.Race.scheduledRace)
                     .selectinload(models.ScheduledRace.mode_obj)
                     .selectinload(models.Mode.archetype_obj)
@@ -274,9 +277,14 @@ class DatabaseService:
 
     def get_race_by_id(self, race_id: int):
         with Session(self.engine) as db:
-            race = db.query(models.Race).filter(models.Race.id == race_id).first()
+            race = (
+                db.query(models.Race)
+                .options(selectinload(models.Race.scheduledRace))
+                .filter(models.Race.id == race_id)
+                .first()
+            )
             return race
-        
+
     def update_race_seed(self, race_id: int, seed: str):
         with Session(self.engine) as db:
             race = db.query(models.Race).filter(models.Race.id == race_id).first()
@@ -286,6 +294,21 @@ class DatabaseService:
                 db.refresh(race)
                 return race
             return None
+
+    def get_latest_races(self, limit: int = 10):
+        with Session(self.engine) as db:
+            latest_races = (
+                db.query(models.Race)
+                .options(
+                    selectinload(models.Race.scheduledRace)
+                    .selectinload(models.ScheduledRace.mode_obj)
+                    .selectinload(models.Mode.archetype_obj)
+                )
+                .order_by(models.Race.id.desc())
+                .limit(limit)
+                .all()
+            )
+            return latest_races
 
     def add_savior_role(self, savior_role: schemas.SaviorRoleWrite):
         with Session(self.engine) as db:

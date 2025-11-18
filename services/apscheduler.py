@@ -13,6 +13,7 @@ from services.discord import DiscordService
 from services.database import DatabaseService
 
 import utils
+import app_context as ac
 
 
 executors = {
@@ -180,4 +181,33 @@ class APSchedulerService:
                 replace_existing=True,
             )
 
+    def delay_race_start(self, race_id, delay_minutes):
+        jobs_delayed = 0
+        try:
+            scheduled_race_id = ac.database_service.get_race_by_id(race_id=race_id).scheduledRace.id
+        except Exception as e:
+            self.logger.error(f"Error getting scheduled race ID for race {race_id}: {e}")
+            return jobs_delayed
+        for job in ['ping_unready_', 'force_start_', 'warn_partitioned_']:
+            job_id = f"{job}{scheduled_race_id}"
+            scheduled_job = self.scheduler.get_job(job_id)
+            if scheduled_job:
+                new_run_time = scheduled_job.next_run_time + datetime.timedelta(
+                    minutes=delay_minutes
+                )
+                self.logger.info(
+                    f"Rescheduling job {job_id} to new time {new_run_time} UTC"
+                )
+                self.scheduler.reschedule_job(
+                    job_id,
+                    trigger=DateTrigger(
+                        new_run_time,
+                        timezone=utc,
+                    ),
+                )
+                ac.discord_service.send_message(
+                    content=f"Rescheduled job {job_id} to new time {new_run_time} UTC"
+                )
+                jobs_delayed += 1
+        return jobs_delayed
 
