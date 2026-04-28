@@ -11,37 +11,23 @@ MMMM_GEN_BODY = [
     {
         "preset": "custom",
         "weights": {
-        "length": [
-            -7,
-            5
-        ],
-        "execution": [
-            -2,
-            8
-        ],
-        "familiarity": [
-            -3,
-            12
-        ],
-        "variance": [
-            -5,
-            10
-        ]
+            "length": [-7, 5],
+            "execution": [-2, 8],
+            "familiarity": [-3, 12],
+            "variance": [-5, 10],
         },
-        "force": [
-        "logic:noglitches"
-        ],
+        "force": ["logic:noglitches"],
         "veto": [
-        "bombbag:on",
-        "timer:timed-ohko",
-        "shuffle:restricted",
-        "shuffle:insanity",
-        "door_shuffle:partitioned",
-        "door_shuffle:crossed",
-        "pottery:cave",
-        "pottery:cavekeys"
+            "bombbag:on",
+            "timer:timed-ohko",
+            "shuffle:restricted",
+            "shuffle:insanity",
+            "door_shuffle:partitioned",
+            "door_shuffle:crossed",
+            "pottery:cave",
+            "pottery:cavekeys",
         ],
-        "race": True
+        "race": True,
     }
 ]
 
@@ -113,7 +99,7 @@ class AvianartService:
         self.logger: logging.Logger = logging.getLogger("avianart")
 
     async def generate_seed(
-        self, preset: str, race: bool, namespace: str = ""
+        self, preset: str, race: bool, namespace: str = "", spoiler: bool = False
     ) -> AvianartGenPayload:
         """
         Trigger seed generation from AVIANART.
@@ -123,9 +109,14 @@ class AvianartService:
             f"Generating {'race' if race else ''}seed using {namespace}/preset: {preset}"
         )
 
-        seed_params = {
-            "race": race,
-        }
+        seed_params = {}
+
+        if race:
+            seed_params["race"] = race
+
+        if spoiler:
+            seed_params["race_spoiler"] = spoiler
+
         preset = preset.lower()
         if namespace:
             seed_params["namespace"] = namespace.lower()
@@ -154,12 +145,10 @@ class AvianartService:
                 json=request_body,
             )
         except Exception as e:
-            self.logger.error(
-                f"Could not reach AVIANART: {e}"
-            )
+            self.logger.error(f"Could not reach AVIANART: {e}")
             await ac.discord_service.send_message(
                 content=f"{admin_ping}Could not reach AVIANART:\n```{e}```",
-            force_mention=True
+                force_mention=True,
             )
             return
 
@@ -169,7 +158,7 @@ class AvianartService:
             )
             await ac.discord_service.send_message(
                 content=f"{admin_ping}Failed to trigger seed generation using {namespace}/{preset}:\n```{generation_response.text}```",
-            force_mention=True
+                force_mention=True,
             )
             raise Exception(
                 f"Failed to trigger seed generation using {namespace}/{preset}: {generation_response.text}"
@@ -197,7 +186,7 @@ class AvianartService:
         )
         await ac.discord_service.send_message(
             content=f"{admin_ping}Generation failed for seed hash: {seed_hash} with message:\n```{status.response.message}```",
-            force_mention=True
+            force_mention=True,
         )
 
     async def fetch_permalink(self, seed_hash: str) -> AvianartGenPayload:

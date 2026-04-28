@@ -25,19 +25,6 @@ utc = zoneinfo.ZoneInfo("UTC")
 est = zoneinfo.ZoneInfo("US/Eastern")  # Eastern Standard Time (EST) timezone
 
 
-class ServicesContainer:
-    """
-    Container for all services used in the application.
-    This allows for easy access to services throughout the application.
-    """
-
-    def __init__(self, avianart, racetime, discord, database):
-        self.avianart: AvianartService = avianart
-        self.racetime: RacetimeService = racetime
-        self.discord: DiscordService = discord
-        self.database: DatabaseService = database
-
-
 class APSchedulerService:
     """
     Service for managing scheduled jobs using APScheduler.
@@ -78,9 +65,7 @@ class APSchedulerService:
         )
         return scheduler
 
-    def schedule_race(
-        self, race_id=None, immediate=False, open_mins_before_start=30
-    ):
+    def schedule_race(self, race_id=None, immediate=False, open_mins_before_start=30):
         # This will schedule all parts needed for a ladder race to run
         # 1.
         #   a. Open room 30 mins prior to time
@@ -109,13 +94,15 @@ class APSchedulerService:
             id=f"open_race_{race_id}",
             replace_existing=True,
             # Allow room to be opened until we 1 min before we try to roll the seed
-            misfire_grace_time=int((
-                (race_utc_datetime - datetime.timedelta(minutes=11))
-                - (
-                    race_utc_datetime
-                    - datetime.timedelta(minutes=open_mins_before_start)
-                )
-            ).seconds),
+            misfire_grace_time=int(
+                (
+                    (race_utc_datetime - datetime.timedelta(minutes=11))
+                    - (
+                        race_utc_datetime
+                        - datetime.timedelta(minutes=open_mins_before_start)
+                    )
+                ).seconds
+            ),
         )
 
         self.scheduler.add_job(
@@ -128,12 +115,12 @@ class APSchedulerService:
             id=f"roll_seed_{race_id}",
             replace_existing=True,
             # Allow seed to be rolled until 5 minutes before start
-            misfire_grace_time=int((
-                (race_utc_datetime - datetime.timedelta(minutes=5))
-                - (
-                    race_utc_datetime - datetime.timedelta(minutes=10)
-                )
-            ).seconds),
+            misfire_grace_time=int(
+                (
+                    (race_utc_datetime - datetime.timedelta(minutes=5))
+                    - (race_utc_datetime - datetime.timedelta(minutes=10))
+                ).seconds
+            ),
         )
 
         if not race.mode_obj.archetype_obj.ladder:
@@ -184,11 +171,15 @@ class APSchedulerService:
     def delay_race_start(self, race_id, delay_minutes):
         jobs_delayed = 0
         try:
-            scheduled_race_id = ac.database_service.get_race_by_id(race_id=race_id).scheduledRace.id
+            scheduled_race_id = ac.database_service.get_race_by_id(
+                race_id=race_id
+            ).scheduledRace.id
         except Exception as e:
-            self.logger.error(f"Error getting scheduled race ID for race {race_id}: {e}")
+            self.logger.error(
+                f"Error getting scheduled race ID for race {race_id}: {e}"
+            )
             return jobs_delayed
-        for job in ['ping_unready_', 'force_start_', 'warn_partitioned_']:
+        for job in ["ping_unready_", "force_start_", "warn_partitioned_"]:
             job_id = f"{job}{scheduled_race_id}"
             scheduled_job = self.scheduler.get_job(job_id)
             if scheduled_job:
@@ -210,4 +201,3 @@ class APSchedulerService:
                 )
                 jobs_delayed += 1
         return jobs_delayed
-

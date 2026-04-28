@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "apscheduler>=3.11.0",
+    "boto3>=1.42.96",
     "fastapi>=0.115.12",
     "frozenlist==1.6.0",
     "hikari>=2.1.1",

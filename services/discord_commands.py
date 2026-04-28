@@ -6,13 +6,15 @@ import logging
 import lightbulb
 import hikari
 import app_context as ac
+from config import import_config
 import datetime
-import models
 
 loader = lightbulb.Loader()
 est = zoneinfo.ZoneInfo("US/Eastern")
 
 logger = logging.getLogger("discord_commands")
+
+config = import_config()
 
 
 async def autocomplete_modes(ctx: lightbulb.AutocompleteContext[str]) -> None:
@@ -48,16 +50,120 @@ async def autocomplete_archetypes(ctx: lightbulb.AutocompleteContext[str]) -> No
     options = dict(list(options.items())[:25])
     await ctx.respond(options)
 
+
 async def autocomplete_races(ctx: lightbulb.AutocompleteContext[str]) -> None:
     current_value: str = ctx.focused.value or ""
     latest_races = ac.database_service.get_latest_races()
 
-    options = {f'[{race.scheduledRace.mode_obj.name}] {race.raceRoom} - ID: {race.id}': str(race.id) for race in latest_races}
+    options = {
+        f"[{race.scheduledRace.mode_obj.name}] {race.raceRoom} - ID: {race.id}": str(
+            race.id
+        )
+        for race in latest_races
+    }
     if current_value:
         options = {
             name: value
             for name, value in options.items()
             if current_value.lower() in name.lower()
+        }
+    options = dict(list(options.items())[:25])
+    await ctx.respond(options)
+
+
+def _get_option_value(ctx: lightbulb.AutocompleteContext, name: str):
+    for option in ctx.interaction.options or []:
+        if option.name == name:
+            return option.value
+        # Handle subcommand-style nested options
+        nested = getattr(option, "options", None)
+        if nested:
+            for sub in nested:
+                if sub.name == name:
+                    return sub.value
+    return None
+
+
+def _resolve_role_label(guild_id, role_id: str, fallback: str) -> str:
+    """Try to look up the live role name from the guild cache; fall back otherwise."""
+    try:
+        bot = ac.discord_service.bot
+        rid_int = int(role_id)
+    except (AttributeError, TypeError, ValueError):
+        return fallback or role_id
+
+    role = None
+    if guild_id is not None:
+        try:
+            role = bot.cache.get_role(rid_int)
+        except Exception:
+            role = None
+        if role is None:
+            try:
+                roles = bot.cache.get_roles_view_for_guild(guild_id)
+                role = roles.get(rid_int) if roles else None
+            except Exception:
+                role = None
+    if role is not None and getattr(role, "name", None):
+        return role.name
+    return fallback or role_id
+
+
+async def autocomplete_archetype_pingable_roles(
+    ctx: lightbulb.AutocompleteContext[str],
+) -> None:
+    current_value: str = ctx.focused.value or ""
+    archetype_id = _get_option_value(ctx, "archetype")
+    options: dict[str, str] = {}
+    if archetype_id is not None:
+        try:
+            archetype_id_int = int(archetype_id)
+        except (TypeError, ValueError):
+            archetype_id_int = None
+        if archetype_id_int is not None:
+            pingable_roles = ac.database_service.get_pingable_archetype_roles(
+                archetype_id_int
+            )
+            guild_id = getattr(ctx.interaction, "guild_id", None)
+            options = {
+                f"{_resolve_role_label(guild_id, pr.roleId, pr.role.roleName)} ({pr.roleId})": pr.roleId
+                for pr in pingable_roles
+            }
+    if current_value:
+        options = {
+            name: value
+            for name, value in options.items()
+            if current_value.lower() in name.lower()
+            or current_value.lower() in value.lower()
+        }
+    options = dict(list(options.items())[:25])
+    await ctx.respond(options)
+
+
+async def autocomplete_mode_pingable_roles(
+    ctx: lightbulb.AutocompleteContext[str],
+) -> None:
+    current_value: str = ctx.focused.value or ""
+    mode_id = _get_option_value(ctx, "mode")
+    options: dict[str, str] = {}
+    if mode_id is not None:
+        try:
+            mode_id_int = int(mode_id)
+        except (TypeError, ValueError):
+            mode_id_int = None
+        if mode_id_int is not None:
+            pingable_roles = ac.database_service.get_pingable_mode_roles(mode_id_int)
+            guild_id = getattr(ctx.interaction, "guild_id", None)
+            options = {
+                f"{_resolve_role_label(guild_id, pr.roleId, pr.role.roleName)} ({pr.roleId})": pr.roleId
+                for pr in pingable_roles
+            }
+    if current_value:
+        options = {
+            name: value
+            for name, value in options.items()
+            if current_value.lower() in name.lower()
+            or current_value.lower() in value.lower()
         }
     options = dict(list(options.items())[:25])
     await ctx.respond(options)
@@ -229,7 +335,6 @@ class SetRacesChannelCommand(
         await ctx.respond(f"Set races channel to <#{results['channel']}>.")
 
 
-
 @loader.command()
 class SetBotLoggingChannelCommand(
     lightbulb.SlashCommand,
@@ -253,6 +358,7 @@ class SetBotLoggingChannelCommand(
         ac.database_service.set_setting("bot_logging_channel_id", results["channel"])
         await ctx.respond(f"Set bot logging channel to <#{results['channel']}>.")
 
+
 @loader.command()
 class SetAdminRoleCommand(
     lightbulb.SlashCommand,
@@ -275,6 +381,7 @@ class SetAdminRoleCommand(
 
         ac.database_service.set_setting("admin_role_id", str(results["role"]))
         await ctx.respond(f"Set admin role to <@&{results['role']}>.")
+
 
 @loader.command()
 class ScheduleCommand(
@@ -346,6 +453,7 @@ class ScheduleCommand(
             )
         await utils.update_schedule_message()
 
+
 @loader.command()
 class DelayRaceCommand(
     lightbulb.SlashCommand,
@@ -374,17 +482,27 @@ class DelayRaceCommand(
             await ctx.respond(f"Race with ID {race_id} not found.", ephemeral=True)
             return
         race_handler: LadderRaceHandler = ac.racetime_service.handler_objects.get(
-                race.raceRoom.lstrip("/"), None
+            race.raceRoom.lstrip("/"), None
         )
         if not race_handler:
-            await ctx.respond(f"Race room {race.raceRoom.lstrip('/')} not found. Has it already been closed?", ephemeral=True)
+            await ctx.respond(
+                f"Race room {race.raceRoom.lstrip('/')} not found. Has it already been closed?",
+                ephemeral=True,
+            )
             return
-        jobs_delayed = ac.scheduler_service.delay_race_start(race_id, results["delay_minutes"])
+        jobs_delayed = ac.scheduler_service.delay_race_start(
+            race_id, results["delay_minutes"]
+        )
         if jobs_delayed:
             await ctx.respond(f"Delayed {jobs_delayed} jobs for race {race_id}.")
-            await race_handler.send_message(f'This race has been delayed by {results["delay_minutes"]} minutes.')
+            await race_handler.send_message(
+                f'This race has been delayed by {results["delay_minutes"]} minutes.'
+            )
         else:
-            await ctx.respond(f"No jobs found to delay for race {race_id}.", ephemeral=True)
+            await ctx.respond(
+                f"No jobs found to delay for race {race_id}.", ephemeral=True
+            )
+
 
 @loader.command()
 class SetRaceSeedCommand(
@@ -400,7 +518,7 @@ class SetRaceSeedCommand(
     )
     seed_hash = lightbulb.string(
         "seed_hash",
-        "The seed hash to set for the race from AVIANART (e.g. 'YMrEqPWmG9')."
+        "The seed hash to set for the race from AVIANART (e.g. 'YMrEqPWmG9').",
     )
 
     @lightbulb.invoke
@@ -418,17 +536,22 @@ class SetRaceSeedCommand(
 
         seed_info = await ac.avianart_service.fetch_permalink(seed_hash)
         if seed_info.response.status or not seed_info.response.patch:
-            await ctx.respond(f"Failed to fetch seed with hash {seed_hash}. Please ensure the seed hash is correct and the seed has been generated.")
+            await ctx.respond(
+                f"Failed to fetch seed with hash {seed_hash}. Please ensure the seed hash is correct and the seed has been generated."
+            )
             return
-        
+
         race_handler: LadderRaceHandler = ac.racetime_service.handler_objects.get(
             room_name, None
         )
         if not race_handler:
-            await ctx.respond(f"Race room {room_name} not found. Has it already been closed?", ephemeral=True)
+            await ctx.respond(
+                f"Race room {room_name} not found. Has it already been closed?",
+                ephemeral=True,
+            )
             return
         hash_str = utils.seed_response_to_hash(seed_info.response)
-        
+
         await race_handler.send_message(
             f"Here is your seed: https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
         )
@@ -447,13 +570,15 @@ class SetRaceSeedCommand(
             admin_ping = f"<@&{admin_role}> " if admin_role else ""
             await ac.discord_service.send_message(
                 content=f"{admin_ping}Failed to update race {race.raceId} with seed ID {seed_info.response.hash}.",
-                force_mention=True
+                force_mention=True,
             )
         await ac.discord_service.send_message(
             content=f"Seed for race {race.raceId}. **Manually set by {ctx.user.username}**: https://avianart.games/perm/{seed_info.response.hash} (https://alttpr.racing/getseed.php?race={race.raceId})",
-            suppress_embeds=True
+            suppress_embeds=True,
         )
-        await ctx.respond(f"Set seed for race {race.raceId} to https://avianart.games/perm/{seed_info.response.hash}.")
+        await ctx.respond(
+            f"Set seed for race {race.raceId} to https://avianart.games/perm/{seed_info.response.hash}."
+        )
 
 
 @loader.command()
@@ -556,11 +681,17 @@ class RollSeedCommand(
         "Whether to roll a race seed.",
         default=False,
     )
+    spoiler = lightbulb.boolean(
+        "spoiler",
+        "Whether to roll as a spoiler seed.",
+        default=False,
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         results = {
-            "race": False,
+            "race": self.race,
+            "spoiler": self.spoiler,
         }
 
         for option in ctx.interaction.options:
@@ -576,10 +707,334 @@ class RollSeedCommand(
         preset = slug.split("/")[1] if "/" in slug else slug
         await ctx.defer(ephemeral=True)
         seed = await ac.avianart_service.generate_seed(
-            preset=preset, race=results["race"], namespace=namespace
+            preset=preset,
+            race=results["race"],
+            namespace=namespace,
+            spoiler=results["spoiler"],
+        )
+        if results["spoiler"]:
+            spoiler_name = utils.avianart_payload_to_spoiler(seed, upload=True)
+
+            await ctx.respond(
+                f"""You selected **[{mode.archetype_obj.name}] {mode.name}** ({slug})
+Seed: https://avianart.games/perm/{seed.response.hash}. 
+Spoiler log: {config['s3_public_bucket_url']}/{spoiler_name}""",
+                ephemeral=True,
+            )
+        else:
+            await ctx.respond(
+                f"""You selected **[{mode.archetype_obj.name}] {mode.name}** ({slug})
+Seed: https://avianart.games/perm/{seed.response.hash}""",
+                ephemeral=True,
+            )
+
+
+def _collect_role_ids(results: dict, keys: list[str]) -> list[str]:
+    role_ids: list[str] = []
+    for key in keys:
+        value = results.get(key)
+        if value is None:
+            continue
+        role_id = str(value)
+        if role_id not in role_ids:
+            role_ids.append(role_id)
+    return role_ids
+
+
+@loader.command()
+class AddArchetypeCommand(
+    lightbulb.SlashCommand,
+    name="add_archetype",
+    description="Add a new archetype, optionally with pingable roles.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    name = lightbulb.string("name", "The name of the archetype.")
+    ladder = lightbulb.boolean(
+        "ladder",
+        "Whether this archetype is a ladder archetype. Defaults to false.",
+        default=False,
+    )
+    pingable_role_1 = lightbulb.mentionable(
+        "pingable_role_1",
+        "Optional pingable role for this archetype.",
+        default=None,
+    )
+    pingable_role_2 = lightbulb.mentionable(
+        "pingable_role_2",
+        "Optional pingable role for this archetype.",
+        default=None,
+    )
+    pingable_role_3 = lightbulb.mentionable(
+        "pingable_role_3",
+        "Optional pingable role for this archetype.",
+        default=None,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {i.name: i.value for i in ctx.interaction.options}
+
+        archetype = ac.database_service.add_archetype(
+            schemas.ArchetypeWrite(
+                name=results["name"],
+                ladder=bool(results.get("ladder", False)),
+            )
+        )
+
+        role_ids = _collect_role_ids(
+            results, ["pingable_role_1", "pingable_role_2", "pingable_role_3"]
+        )
+        for role_id in role_ids:
+            ac.database_service.add_pingable_archetype_role(
+                schemas.PingableArchetypeRoleWrite(
+                    archetypeId=archetype.id,
+                    roleId=role_id,
+                )
+            )
+
+        if role_ids:
+            mentions = ", ".join(f"<@&{r}>" for r in role_ids)
+            await ctx.respond(
+                f"Added archetype **{archetype.name}** (ID: {archetype.id}) with pingable roles: {mentions}."
+            )
+        else:
+            await ctx.respond(
+                f"Added archetype **{archetype.name}** (ID: {archetype.id})."
+            )
+
+
+@loader.command()
+class AddModeCommand(
+    lightbulb.SlashCommand,
+    name="add_mode",
+    description="Add a new mode, optionally with pingable roles.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    archetype = lightbulb.integer(
+        "archetype",
+        "The archetype this mode belongs to.",
+        autocomplete=autocomplete_archetypes,
+    )
+    name = lightbulb.string("name", "The name of the mode.")
+    slug = lightbulb.string(
+        "slug",
+        "The avianart slug for this mode (e.g. 'namespace/preset' or 'preset').",
+    )
+    description = lightbulb.string(
+        "description",
+        "Optional description of the mode.",
+        default=None,
+    )
+    pingable_role_1 = lightbulb.mentionable(
+        "pingable_role_1",
+        "Optional pingable role for this mode.",
+        default=None,
+    )
+    pingable_role_2 = lightbulb.mentionable(
+        "pingable_role_2",
+        "Optional pingable role for this mode.",
+        default=None,
+    )
+    pingable_role_3 = lightbulb.mentionable(
+        "pingable_role_3",
+        "Optional pingable role for this mode.",
+        default=None,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {i.name: i.value for i in ctx.interaction.options}
+
+        archetype_id = int(results["archetype"])
+        archetype = ac.database_service.get_archetype_by_id(archetype_id)
+        if not archetype:
+            await ctx.respond("Invalid archetype selected.", ephemeral=True)
+            return
+
+        mode = ac.database_service.add_mode(
+            schemas.ModeWrite(
+                archetype=archetype_id,
+                name=results["name"],
+                slug=results["slug"],
+                description=results.get("description"),
+            )
+        )
+
+        role_ids = _collect_role_ids(
+            results, ["pingable_role_1", "pingable_role_2", "pingable_role_3"]
+        )
+        for role_id in role_ids:
+            ac.database_service.add_pingable_mode_role(
+                schemas.PingableModeRoleWrite(
+                    modeId=mode.id,
+                    roleId=role_id,
+                )
+            )
+
+        if role_ids:
+            mentions = ", ".join(f"<@&{r}>" for r in role_ids)
+            await ctx.respond(
+                f"Added mode **[{archetype.name}] {mode.name}** (ID: {mode.id}, slug: `{mode.slug}`) with pingable roles: {mentions}."
+            )
+        else:
+            await ctx.respond(
+                f"Added mode **[{archetype.name}] {mode.name}** (ID: {mode.id}, slug: `{mode.slug}`)."
+            )
+
+
+@loader.command()
+class AddPingableArchetypeRoleCommand(
+    lightbulb.SlashCommand,
+    name="add_pingable_archetype_role",
+    description="Add a pingable role to an archetype.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    archetype = lightbulb.integer(
+        "archetype",
+        "The archetype to add a pingable role to.",
+        autocomplete=autocomplete_archetypes,
+    )
+    role = lightbulb.mentionable(
+        "role",
+        "The role to add as pingable for this archetype.",
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {i.name: i.value for i in ctx.interaction.options}
+        archetype_id = int(results["archetype"])
+        archetype = ac.database_service.get_archetype_by_id(archetype_id)
+        if not archetype:
+            await ctx.respond("Invalid archetype selected.", ephemeral=True)
+            return
+
+        role_id = str(results["role"])
+        ac.database_service.add_pingable_archetype_role(
+            schemas.PingableArchetypeRoleWrite(
+                archetypeId=archetype_id,
+                roleId=role_id,
+            )
         )
         await ctx.respond(
-            f"""You selected **[{mode.archetype_obj.name}] {mode.name}** ({slug})
-Seed: https://avianart.games/perm/{seed.response.hash}""",
-            ephemeral=True,
+            f"Added pingable role <@&{role_id}> to archetype **{archetype.name}**."
         )
+
+
+@loader.command()
+class AddPingableModeRoleCommand(
+    lightbulb.SlashCommand,
+    name="add_pingable_mode_role",
+    description="Add a pingable role to a mode.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    mode = lightbulb.integer(
+        "mode",
+        "The mode to add a pingable role to.",
+        autocomplete=autocomplete_modes,
+    )
+    role = lightbulb.mentionable(
+        "role",
+        "The role to add as pingable for this mode.",
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {i.name: i.value for i in ctx.interaction.options}
+        mode_id = int(results["mode"])
+        mode = ac.database_service.get_mode_by_id(mode_id)
+        if not mode:
+            await ctx.respond("Invalid mode selected.", ephemeral=True)
+            return
+
+        role_id = str(results["role"])
+        ac.database_service.add_pingable_mode_role(
+            schemas.PingableModeRoleWrite(
+                modeId=mode_id,
+                roleId=role_id,
+            )
+        )
+        await ctx.respond(
+            f"Added pingable role <@&{role_id}> to mode **[{mode.archetype_obj.name}] {mode.name}**."
+        )
+
+
+@loader.command()
+class RemovePingableArchetypeRoleCommand(
+    lightbulb.SlashCommand,
+    name="remove_pingable_archetype_role",
+    description="Remove a pingable role from an archetype.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    archetype = lightbulb.integer(
+        "archetype",
+        "The archetype to remove a pingable role from.",
+        autocomplete=autocomplete_archetypes,
+    )
+    role = lightbulb.string(
+        "role",
+        "The pingable role to remove from this archetype.",
+        autocomplete=autocomplete_archetype_pingable_roles,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {i.name: i.value for i in ctx.interaction.options}
+        archetype_id = int(results["archetype"])
+        archetype = ac.database_service.get_archetype_by_id(archetype_id)
+        if not archetype:
+            await ctx.respond("Invalid archetype selected.", ephemeral=True)
+            return
+
+        role_id = str(results["role"])
+        deleted = ac.database_service.delete_pingable_archetype_role(
+            archetype_id, role_id
+        )
+        if deleted:
+            await ctx.respond(
+                f"Removed pingable role <@&{role_id}> from archetype **{archetype.name}**."
+            )
+        else:
+            await ctx.respond(
+                f"No pingable role <@&{role_id}> found on archetype **{archetype.name}**.",
+                ephemeral=True,
+            )
+
+
+@loader.command()
+class RemovePingableModeRoleCommand(
+    lightbulb.SlashCommand,
+    name="remove_pingable_mode_role",
+    description="Remove a pingable role from a mode.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    mode = lightbulb.integer(
+        "mode",
+        "The mode to remove a pingable role from.",
+        autocomplete=autocomplete_modes,
+    )
+    role = lightbulb.string(
+        "role",
+        "The pingable role to remove from this mode.",
+        autocomplete=autocomplete_mode_pingable_roles,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        results = {i.name: i.value for i in ctx.interaction.options}
+        mode_id = int(results["mode"])
+        mode = ac.database_service.get_mode_by_id(mode_id)
+        if not mode:
+            await ctx.respond("Invalid mode selected.", ephemeral=True)
+            return
+
+        role_id = str(results["role"])
+        deleted = ac.database_service.delete_pingable_mode_role(mode_id, role_id)
+        if deleted:
+            await ctx.respond(
+                f"Removed pingable role <@&{role_id}> from mode **[{mode.archetype_obj.name}] {mode.name}**."
+            )
+        else:
+            await ctx.respond(
+                f"No pingable role <@&{role_id}> found on mode **[{mode.archetype_obj.name}] {mode.name}**.",
+                ephemeral=True,
+            )

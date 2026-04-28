@@ -13,6 +13,7 @@ class Archetype(Base):
     name: Mapped[str] = mapped_column(TEXT, nullable=False)
     active: Mapped[Optional[bool]] = mapped_column(BIT, nullable=True, default=True)
     ladder: Mapped[Optional[bool]] = mapped_column(BIT, nullable=True, default=False)
+    spoiler: Mapped[Optional[bool]] = mapped_column(BIT, nullable=True, default=False)
 
     modes: Mapped[List["Mode"]] = relationship(
         back_populates="archetype_obj",

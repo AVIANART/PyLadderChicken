@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
+
 class ModeRead(BaseModel):
     id: int
     name: str
@@ -39,6 +40,7 @@ class RaceRead(BaseModel):
     class Config:
         from_attributes = True
 
+
 class PartitionedRaceWrite(BaseModel):
     raceId: int
     raceRoom: Optional[str] = None
@@ -59,10 +61,12 @@ class ScheduledRaceRead(BaseModel):
     class Config:
         from_attributes = True
 
+
 class ScheduledRaceWrite(BaseModel):
     time: datetime
     season: int
     mode: int
+
 
 class PingableModeRoleRead(BaseModel):
     modeId: int
@@ -115,6 +119,42 @@ class ScheduledRaceWrite(BaseModel):
 
 class SaviorRoleWrite(BaseModel):
     archetypeId: int
+    roleId: str
+
+    class Config:
+        from_attributes = True
+
+
+class ArchetypeWrite(BaseModel):
+    name: str
+    active: Optional[bool] = True
+    ladder: Optional[bool] = False
+
+    class Config:
+        from_attributes = True
+
+
+class ModeWrite(BaseModel):
+    archetype: int
+    name: str
+    slug: str
+    description: Optional[str] = None
+    active: Optional[bool] = True
+
+    class Config:
+        from_attributes = True
+
+
+class PingableArchetypeRoleWrite(BaseModel):
+    archetypeId: int
+    roleId: str
+
+    class Config:
+        from_attributes = True
+
+
+class PingableModeRoleWrite(BaseModel):
+    modeId: int
     roleId: str
 
     class Config:

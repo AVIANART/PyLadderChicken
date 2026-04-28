@@ -6,6 +6,7 @@ from services.racetime import RacetimeService
 from services.apscheduler import APSchedulerService
 from services.discord import DiscordService
 from services.database import DatabaseService
+from services.s3 import S3Service
 import services.api as api
 from apscheduler.triggers.cron import CronTrigger
 from config import import_config
@@ -48,12 +49,18 @@ async def main():
     scheduler = APSchedulerService(
         avianart=avianart, racetime=racetime, discord=discord, database=database
     )
+    s3 = S3Service(
+        endpoint_url=config["s3_endpoint_url"],
+        access_key=config["s3_access_key"],
+        secret_key=config["s3_secret_key"],
+        bucket_name=config["s3_public_bucket_name"],
+    )
     racetime.start()
     discord_task = asyncio.create_task(discord.start_bot())
     api_task = asyncio.create_task(api.main())
 
     # Store services in the app context for global access
-    app_context.set_services(avianart, racetime, discord, database, scheduler)
+    app_context.set_services(avianart, racetime, discord, database, scheduler, s3)
     await asyncio.sleep(5)
 
     await utils.schedule_future_races()

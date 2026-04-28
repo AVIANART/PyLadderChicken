@@ -11,6 +11,11 @@ required_config = [
     "DATABASE_NAME",
     "DATABASE_USER",
     "DATABASE_PASSWORD",
+    "S3_ENDPOINT_URL",
+    "S3_ACCESS_KEY",
+    "S3_SECRET_KEY",
+    "S3_PUBLIC_BUCKET_URL",
+    "S3_PUBLIC_BUCKET_NAME",
 ]
 
 
@@ -22,9 +27,10 @@ def import_config():
             raise ValueError(f"Missing required configuration: {key}")
 
     config = {key.lower(): _config.get(key) for key in _config}
-    
-    if "racetime_local_instance" in config:
-        config["racetime_local_instance"] = False if config["racetime_local_instance"] == "False" else True
 
+    if "racetime_local_instance" in config:
+        config["racetime_local_instance"] = (
+            False if config["racetime_local_instance"] == "False" else True
+        )
 
     return config

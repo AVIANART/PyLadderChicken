@@ -378,3 +378,134 @@ class DatabaseService:
                 .all()
             )
             return archetypes
+
+    def add_archetype(self, archetype: schemas.ArchetypeWrite):
+        with Session(self.engine) as db:
+            db_archetype = models.Archetype(**archetype.model_dump())
+            db.add(db_archetype)
+            db.commit()
+            db.refresh(db_archetype)
+            self.get_archetypes.cache_clear()
+            return db_archetype
+
+    def add_mode(self, mode: schemas.ModeWrite):
+        with Session(self.engine) as db:
+            db_mode = models.Mode(**mode.model_dump())
+            db.add(db_mode)
+            db.commit()
+            db.refresh(db_mode)
+            self.get_modes.cache_clear()
+            self.get_archetypes.cache_clear()
+            return db_mode
+
+    def get_or_create_role(self, role_id: str, role_name: str = None):
+        with Session(self.engine) as db:
+            role = (
+                db.query(models.Role)
+                .filter(models.Role.roleName == (role_name or role_id))
+                .first()
+            )
+            if role:
+                return role
+            role = models.Role(roleId=role_id, roleName=role_name or role_id)
+            db.add(role)
+            db.commit()
+            db.refresh(role)
+            return role
+
+    def add_pingable_archetype_role(
+        self, pingable_role: schemas.PingableArchetypeRoleWrite
+    ):
+        self.get_or_create_role(pingable_role.roleId)
+        with Session(self.engine) as db:
+            existing = (
+                db.query(models.PingableArchetypeRole)
+                .filter(
+                    models.PingableArchetypeRole.archetypeId
+                    == pingable_role.archetypeId,
+                    models.PingableArchetypeRole.roleId == pingable_role.roleId,
+                )
+                .first()
+            )
+            if existing:
+                return existing
+            db_pingable = models.PingableArchetypeRole(**pingable_role.model_dump())
+            db.add(db_pingable)
+            db.commit()
+            db.refresh(db_pingable)
+            self.get_archetypes.cache_clear()
+            return db_pingable
+
+    def add_pingable_mode_role(self, pingable_role: schemas.PingableModeRoleWrite):
+        self.get_or_create_role(pingable_role.roleId)
+        with Session(self.engine) as db:
+            existing = (
+                db.query(models.PingableModeRole)
+                .filter(
+                    models.PingableModeRole.modeId == pingable_role.modeId,
+                    models.PingableModeRole.roleId == pingable_role.roleId,
+                )
+                .first()
+            )
+            if existing:
+                return existing
+            db_pingable = models.PingableModeRole(**pingable_role.model_dump())
+            db.add(db_pingable)
+            db.commit()
+            db.refresh(db_pingable)
+            self.get_modes.cache_clear()
+            return db_pingable
+
+    def get_pingable_archetype_roles(self, archetype_id: int):
+        with Session(self.engine) as db:
+            roles = (
+                db.query(models.PingableArchetypeRole)
+                .options(selectinload(models.PingableArchetypeRole.role))
+                .filter(models.PingableArchetypeRole.archetypeId == archetype_id)
+                .all()
+            )
+            return roles
+
+    def get_pingable_mode_roles(self, mode_id: int):
+        with Session(self.engine) as db:
+            roles = (
+                db.query(models.PingableModeRole)
+                .options(selectinload(models.PingableModeRole.role))
+                .filter(models.PingableModeRole.modeId == mode_id)
+                .all()
+            )
+            return roles
+
+    def delete_pingable_archetype_role(self, archetype_id: int, role_id: str):
+        with Session(self.engine) as db:
+            pingable = (
+                db.query(models.PingableArchetypeRole)
+                .filter(
+                    models.PingableArchetypeRole.archetypeId == archetype_id,
+                    models.PingableArchetypeRole.roleId == role_id,
+                )
+                .first()
+            )
+            if pingable:
+                db.delete(pingable)
+                db.commit()
+                self.get_archetypes.cache_clear()
+                return True
+            return False
+
+    def delete_pingable_mode_role(self, mode_id: int, role_id: str):
+        with Session(self.engine) as db:
+            pingable = (
+                db.query(models.PingableModeRole)
+                .filter(
+                    models.PingableModeRole.modeId == mode_id,
+                    models.PingableModeRole.roleId == role_id,
+                )
+                .first()
+            )
+            if pingable:
+                db.delete(pingable)
+                db.commit()
+                self.get_modes.cache_clear()
+                return True
+            return False

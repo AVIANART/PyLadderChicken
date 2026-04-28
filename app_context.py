@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from services.discord import DiscordService
     from services.database import DatabaseService
     from services.apscheduler import APSchedulerService
+    from services.s3 import S3Service
 
 # Global instances of services, this lets us access them anywhere in the application
 avianart_service: "AvianartService" = None
@@ -14,6 +15,7 @@ racetime_service: "RacetimeService" = None
 discord_service: "DiscordService" = None
 database_service: "DatabaseService" = None
 scheduler_service: "APSchedulerService" = None
+s3_service: "S3Service" = None
 
 
 def set_services(
@@ -22,14 +24,16 @@ def set_services(
     discord: "DiscordService",
     database: "DatabaseService",
     scheduler: "APSchedulerService",
+    s3: "S3Service",
 ):
     """
     Sets the global service instances.
     This function should be called once at the start of the application.
     """
-    global avianart_service, racetime_service, discord_service, database_service, scheduler_service
+    global avianart_service, racetime_service, discord_service, database_service, scheduler_service, s3_service
     avianart_service = avianart
     racetime_service = racetime
     discord_service = discord
     database_service = database
     scheduler_service = scheduler
+    s3_service = s3
