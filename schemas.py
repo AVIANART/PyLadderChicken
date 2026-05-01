@@ -122,6 +122,7 @@ class ScheduledRaceWrite(BaseModel):
 class SaviorRoleWrite(BaseModel):
     archetypeId: int
     roleId: str
+    roleName: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -151,6 +152,7 @@ class ModeWrite(BaseModel):
 class PingableArchetypeRoleWrite(BaseModel):
     archetypeId: int
     roleId: str
+    roleName: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -159,6 +161,7 @@ class PingableArchetypeRoleWrite(BaseModel):
 class PingableModeRoleWrite(BaseModel):
     modeId: int
     roleId: str
+    roleName: Optional[str] = None
 
     class Config:
         from_attributes = True

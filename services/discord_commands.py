@@ -559,6 +559,11 @@ class AddSaviorRoleCommand(
         "role",
         "The role to set as a savior role.",
     )
+    role_name = lightbulb.string(
+        "role_name",
+        "Optional friendly name to store for this role (defaults to the live discord role name).",
+        default=None,
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -572,13 +577,17 @@ class AddSaviorRoleCommand(
             return
 
         role_id = str(self.role)
+        resolved_name = self.role_name or _resolve_role_label(
+            ctx.guild_id, role_id, role_id
+        )
         savior_role = schemas.SaviorRoleWrite(
             archetypeId=archetype.id,
             roleId=role_id,
+            roleName=resolved_name,
         )
         ac.database_service.add_savior_role(savior_role)
         await ctx.respond(
-            f"Set savior role <@&{role_id}> for {archetype.name}."
+            f"Set savior role <@&{role_id}> ({resolved_name}) for {archetype.name}."
         )
 
 
@@ -593,6 +602,11 @@ class SetAllSaviorRolesCommand(
         "role",
         "The role to set as a savior role for all archetypes.",
     )
+    role_name = lightbulb.string(
+        "role_name",
+        "Optional friendly name to store for this role (defaults to the live discord role name).",
+        default=None,
+    )
     overwrite = lightbulb.boolean(
         "overwrite",
         "If true, will overwrite existing savior roles for all archetypes. Defaults to false.",
@@ -602,6 +616,9 @@ class SetAllSaviorRolesCommand(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         role_id = str(self.role)
+        resolved_name = self.role_name or _resolve_role_label(
+            ctx.guild_id, role_id, role_id
+        )
         archetypes = ac.database_service.get_archetypes()
         for archetype in archetypes:
             if not self.overwrite and archetype.saviorRoles:
@@ -614,15 +631,16 @@ class SetAllSaviorRolesCommand(
             savior_role = schemas.SaviorRoleWrite(
                 archetypeId=archetype.id,
                 roleId=role_id,
+                roleName=resolved_name,
             )
             ac.database_service.add_savior_role(savior_role)
         if self.overwrite:
             await ctx.respond(
-                f"Overwrote savior roles for all archetypes with <@&{role_id}>."
+                f"Overwrote savior roles for all archetypes with <@&{role_id}> ({resolved_name})."
             )
         else:
             await ctx.respond(
-                f"Set savior role <@&{role_id}> for all archetypes without a role."
+                f"Set savior role <@&{role_id}> ({resolved_name}) for all archetypes without a role."
             )
 
 
@@ -738,6 +756,7 @@ class AddArchetypeCommand(
                 schemas.PingableArchetypeRoleWrite(
                     archetypeId=archetype.id,
                     roleId=role_id,
+                    roleName=_resolve_role_label(ctx.guild_id, role_id, role_id),
                 )
             )
 
@@ -815,6 +834,7 @@ class AddModeCommand(
                 schemas.PingableModeRoleWrite(
                     modeId=mode.id,
                     roleId=role_id,
+                    roleName=_resolve_role_label(ctx.guild_id, role_id, role_id),
                 )
             )
 
@@ -845,6 +865,11 @@ class AddPingableArchetypeRoleCommand(
         "role",
         "The role to add as pingable for this archetype.",
     )
+    role_name = lightbulb.string(
+        "role_name",
+        "Optional friendly name to store for this role (defaults to the live discord role name).",
+        default=None,
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -855,14 +880,18 @@ class AddPingableArchetypeRoleCommand(
             return
 
         role_id = str(self.role)
+        resolved_name = self.role_name or _resolve_role_label(
+            ctx.guild_id, role_id, role_id
+        )
         ac.database_service.add_pingable_archetype_role(
             schemas.PingableArchetypeRoleWrite(
                 archetypeId=archetype_id,
                 roleId=role_id,
+                roleName=resolved_name,
             )
         )
         await ctx.respond(
-            f"Added pingable role <@&{role_id}> to archetype **{archetype.name}**."
+            f"Added pingable role <@&{role_id}> ({resolved_name}) to archetype **{archetype.name}**."
         )
 
 
@@ -882,6 +911,11 @@ class AddPingableModeRoleCommand(
         "role",
         "The role to add as pingable for this mode.",
     )
+    role_name = lightbulb.string(
+        "role_name",
+        "Optional friendly name to store for this role (defaults to the live discord role name).",
+        default=None,
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -892,14 +926,18 @@ class AddPingableModeRoleCommand(
             return
 
         role_id = str(self.role)
+        resolved_name = self.role_name or _resolve_role_label(
+            ctx.guild_id, role_id, role_id
+        )
         ac.database_service.add_pingable_mode_role(
             schemas.PingableModeRoleWrite(
                 modeId=mode_id,
                 roleId=role_id,
+                roleName=resolved_name,
             )
         )
         await ctx.respond(
-            f"Added pingable role <@&{role_id}> to mode **[{mode.archetype_obj.name}] {mode.name}**."
+            f"Added pingable role <@&{role_id}> ({resolved_name}) to mode **[{mode.archetype_obj.name}] {mode.name}**."
         )
 
 

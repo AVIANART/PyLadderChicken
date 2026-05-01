@@ -314,8 +314,11 @@ class DatabaseService:
             return latest_races
 
     def add_savior_role(self, savior_role: schemas.SaviorRoleWrite):
+        self.get_or_create_role(savior_role.roleId, savior_role.roleName)
         with Session(self.engine) as db:
-            db_savior_role = models.SaviorRole(**savior_role.model_dump())
+            db_savior_role = models.SaviorRole(
+                **savior_role.model_dump(exclude={"roleName"})
+            )
             db.add(db_savior_role)
             db.commit()
             db.refresh(db_savior_role)
@@ -405,10 +408,14 @@ class DatabaseService:
         with Session(self.engine) as db:
             role = (
                 db.query(models.Role)
-                .filter(models.Role.roleName == (role_name or role_id))
+                .filter(models.Role.roleId == role_id)
                 .first()
             )
             if role:
+                if role_name and role.roleName != role_name:
+                    role.roleName = role_name
+                    db.commit()
+                    db.refresh(role)
                 return role
             role = models.Role(roleId=role_id, roleName=role_name or role_id)
             db.add(role)
@@ -419,7 +426,7 @@ class DatabaseService:
     def add_pingable_archetype_role(
         self, pingable_role: schemas.PingableArchetypeRoleWrite
     ):
-        self.get_or_create_role(pingable_role.roleId)
+        self.get_or_create_role(pingable_role.roleId, pingable_role.roleName)
         with Session(self.engine) as db:
             existing = (
                 db.query(models.PingableArchetypeRole)
@@ -432,7 +439,9 @@ class DatabaseService:
             )
             if existing:
                 return existing
-            db_pingable = models.PingableArchetypeRole(**pingable_role.model_dump())
+            db_pingable = models.PingableArchetypeRole(
+                **pingable_role.model_dump(exclude={"roleName"})
+            )
             db.add(db_pingable)
             db.commit()
             db.refresh(db_pingable)
@@ -440,7 +449,7 @@ class DatabaseService:
             return db_pingable
 
     def add_pingable_mode_role(self, pingable_role: schemas.PingableModeRoleWrite):
-        self.get_or_create_role(pingable_role.roleId)
+        self.get_or_create_role(pingable_role.roleId, pingable_role.roleName)
         with Session(self.engine) as db:
             existing = (
                 db.query(models.PingableModeRole)
@@ -452,7 +461,9 @@ class DatabaseService:
             )
             if existing:
                 return existing
-            db_pingable = models.PingableModeRole(**pingable_role.model_dump())
+            db_pingable = models.PingableModeRole(
+                **pingable_role.model_dump(exclude={"roleName"})
+            )
             db.add(db_pingable)
             db.commit()
             db.refresh(db_pingable)

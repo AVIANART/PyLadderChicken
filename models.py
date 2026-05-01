@@ -1,5 +1,5 @@
 from sqlalchemy import ForeignKey, Text, Integer
-from sqlalchemy.dialects.mysql import TINYINT, SMALLINT, BIT, BIGINT, TEXT, DATETIME
+from sqlalchemy.dialects.mysql import TINYINT, SMALLINT, BIT, BIGINT, TEXT, DATETIME, INTEGER
 from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
 from datetime import datetime
 from typing import List, Optional
@@ -83,6 +83,7 @@ class PartitionedRace(Base):
 
 class Role(Base):
     __tablename__ = "roles"
+    id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
     roleId: Mapped[str] = mapped_column(TEXT, nullable=False)
     roleName: Mapped[str] = mapped_column(TEXT, nullable=False, primary_key=True)
 
@@ -99,6 +100,7 @@ class Role(Base):
 
 class PingableArchetypeRole(Base):
     __tablename__ = "pingableArchetypeRoles"
+    id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
     archetypeId: Mapped[int] = mapped_column(
         TINYINT, ForeignKey("archetypes.id"), primary_key=True
     )
@@ -112,6 +114,7 @@ class PingableArchetypeRole(Base):
 
 class PingableModeRole(Base):
     __tablename__ = "pingableModeRoles"
+    id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
     modeId: Mapped[int] = mapped_column(
         SMALLINT, ForeignKey("modes.id"), primary_key=True
     )
@@ -125,6 +128,7 @@ class PingableModeRole(Base):
 
 class SaviorRole(Base):
     __tablename__ = "saviorRoles"
+    id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
     archetypeId: Mapped[int] = mapped_column(
         TINYINT, ForeignKey("archetypes.id"), primary_key=True
     )
