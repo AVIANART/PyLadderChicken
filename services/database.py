@@ -547,7 +547,7 @@ class DatabaseService:
                 .all()
             )
             sched_race_ids = [
-                x.raceId for x in sched_races if x.raceId is not None
+                x.raceId for x in sched_races if x.raceId is not None and x.raceId > 0
             ]
             races = (
                 db.query(models.Race)
@@ -569,7 +569,7 @@ class DatabaseService:
                 .all()
             )
             sched_race_ids = [
-                x.raceId for x in sched_races if x.raceId is not None
+                x.raceId for x in sched_races if x.raceId is not None and x.raceId > 0
             ]
             races = (
                 db.query(models.Race)
