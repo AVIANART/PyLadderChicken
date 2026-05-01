@@ -12,7 +12,7 @@ import app_context as ac
 from apscheduler.triggers.date import DateTrigger
 
 
-WELCOME_MESSAGE = "Welcome to this StepLadder race!"
+WELCOME_MESSAGE = "Welcome to this Step Ladder race!"
 
 utc = zoneinfo.ZoneInfo("UTC")
 est = zoneinfo.ZoneInfo("US/Eastern")
