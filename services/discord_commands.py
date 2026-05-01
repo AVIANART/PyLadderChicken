@@ -1,5 +1,6 @@
 import schemas
 from services.racetime import LadderRaceHandler
+from utils import spoiler_utils
 import utils.race_utils as race_utils
 import zoneinfo
 import logging
@@ -664,7 +665,7 @@ class RollSeedCommand(
             spoiler=self.spoiler,
         )
         if self.spoiler:
-            spoiler_name = race_utils.spoiler_utils.avianart_payload_to_spoiler(seed, upload=True)
+            spoiler_name = spoiler_utils.avianart_payload_to_spoiler(seed, upload=True)
 
             await ctx.respond(
                 f"""You selected **[{mode.archetype_obj.name}] {mode.name}** ({slug})
