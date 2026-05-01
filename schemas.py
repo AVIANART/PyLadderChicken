@@ -36,6 +36,8 @@ class RaceRead(BaseModel):
     raceActive: Optional[bool] = True
     raceRoom: Optional[str] = None
     seed: Optional[str] = None
+    mode: Optional[int] = None
+    spoilerUrl: Optional[str] = None
 
     class Config:
         from_attributes = True

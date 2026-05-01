@@ -1,14 +1,9 @@
 import asyncio
-import json
-import os
-from pathlib import Path
 import random
-import tempfile
 from typing import TYPE_CHECKING
 import zoneinfo
 import datetime
 from apscheduler.triggers.date import DateTrigger
-
 
 import datetime
 import logging
@@ -17,8 +12,8 @@ import hikari
 
 from services.avianart import AvianResponsePayload
 import app_context as ac
-import spoiler_converter
 from config import import_config
+from utils.spoiler_utils import avianart_payload_to_spoiler
 
 if TYPE_CHECKING:
     from services.racetime import LadderRaceHandler
@@ -64,64 +59,20 @@ random_post_race_messages = [
     "I should learn glitches...",
 ]
 
-possible_prizes = {
-    "Small Heart": 0xD8,
-    "Fairy": 0xE3,
-    "Rupee (1)": 0xD9,
-    "Rupees (5)": 0xDA,
-    "Rupees (20)": 0xDB,
-    "Big Magic": 0xE0,
-    "Small Magic": 0xDF,
-    "Single Bomb": 0xDC,
-    "Bombs (4)": 0xDD,
-    "Bombs (8)": 0xDE,
-    "Arrows (5)": 0xE1,
-    "Arrows (10)": 0xE2,
-}
-
-possible_mem_locs_to_prizes = {v: k for k, v in possible_prizes.items()}
-
-ENEMY_GROUP_NAMES = {
-    1: "HeartsGroup",
-    2: "RupeesGroup",
-    3: "MagicGroup",
-    4: "BombsGroup",
-    5: "ArrowsGroup",
-    6: "SmallVarietyGroup",
-    7: "LargeVarietyGroup",
-}
-
-
-def get_prize_pack_name(prize_pack_set):
-    if prize_pack_set[0] == "Small Heart":  # Heart
-        if prize_pack_set[1] == "Fairy":  # Fairy
-            return "LargeVarietyPack"
-        return "HeartsPack"
-    if prize_pack_set[0] == "Rupees (5)":  # RupeeBlue
-        return "RupeesPack"
-    if prize_pack_set[0] == "Single Bomb":  # BombRefill1
-        return "BombsPack"
-    if prize_pack_set[0] == "Small Magic":  # MagicRefillSmall
-        return "SmallVarietyPack"
-    if prize_pack_set[0] == "Big Magic":  # MagicRefillFull
-        return "MagicPack"
-    if prize_pack_set[0] == "Arrows (5)":  # ArrowRefill5
-        return "ArrowsPack"
-
 
 async def open_race_room(race_id: int):
     """
     Opens a room and notifies the Discord channel.
     """
-    race = ac.database_service.get_scheduled_race_by_id(race_id)
-    race_utc_datetime = race.time.replace(tzinfo=est).astimezone(utc)
+    sched_race = ac.database_service.get_scheduled_race_by_id(race_id)
+    race_utc_datetime = sched_race.time.replace(tzinfo=est).astimezone(utc)
     # Convert from EST to UTC
     delta_ts = (
         datetime.datetime.now(utc) + (race_utc_datetime - datetime.datetime.now(utc))
     ).timestamp()
 
     ping_roles = ac.database_service.get_default_plus_mode_pingable_roles(
-        race.mode_obj.id
+        sched_race.mode_obj.id
     )
     roles_str = ""
     for role in ping_roles:
@@ -129,7 +80,7 @@ async def open_race_room(race_id: int):
 
     race_kwargs = ladder_kwargs.copy()
 
-    if race.mode_obj.archetype_obj.ladder:
+    if sched_race.mode_obj.archetype_obj.ladder:
         race_kwargs["goal"] = f"Beat The Game (1v1)"
         race_kwargs["partitionable"] = True
         # race_kwargs['hide_entrants'] = True
@@ -139,13 +90,13 @@ async def open_race_room(race_id: int):
 
     room_name = await ac.racetime_service.start_race(
         # We use info_user because it will be concatenated with info_bot later
-        info_user=f"Step Ladder Series - [{race.mode_obj.archetype_obj.name}] - {race.mode_obj.name}",
+        info_user=f"Step Ladder Series - [{sched_race.mode_obj.archetype_obj.name}] - {sched_race.mode_obj.name}",
         **race_kwargs,
     )
 
     races_channel_id = ac.database_service.get_setting("races_channel_id")
-    message = f"{roles_str}\n**[{race.mode_obj.archetype_obj.name}] {race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)} -- <t:{int(delta_ts)}:R>"
-    if race.mode_obj.archetype_obj.ladder:
+    message = f"{roles_str}\n**[{sched_race.mode_obj.archetype_obj.name}] {sched_race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)} -- <t:{int(delta_ts)}:R>"
+    if sched_race.mode_obj.archetype_obj.ladder:
         message += (
             f"\n**This is a 1v1 ladder race using the partitioning system in rt.gg**"
         )
@@ -155,7 +106,7 @@ async def open_race_room(race_id: int):
         )
     await ac.discord_service.send_message(content=message)
 
-    ac.database_service.add_fired_race(room_name, race)
+    ac.database_service.add_fired_race(room_name, sched_race)
     await update_schedule_message()
     return room_name
 
@@ -164,40 +115,42 @@ async def roll_seed(race_id: int):
     """
     Rolls a seed for the given slug and namespace.
     """
-    race = ac.database_service.get_scheduled_race_by_id(race_id)
+    sched_race = ac.database_service.get_scheduled_race_by_id(race_id)
 
-    if not race.raceId:
-        logger.error(f"Cannot roll seed! Race {race.id} does not have a race room.")
+    if not sched_race.raceId:
+        logger.error(f"Cannot roll seed! Race {sched_race.id} does not have a race room.")
         return
+    
+    race = ac.database_service.get_race_by_id(sched_race.raceId)
 
-    room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+    room_name = race.raceRoom.lstrip("/")
 
-    namespace = race.mode_obj.slug.split("/")[0] if "/" in race.mode_obj.slug else None
+    namespace = sched_race.mode_obj.slug.split("/")[0] if "/" in sched_race.mode_obj.slug else None
     slug = (
-        race.mode_obj.slug.split("/")[1]
-        if "/" in race.mode_obj.slug
-        else race.mode_obj.slug
+        sched_race.mode_obj.slug.split("/")[1]
+        if "/" in sched_race.mode_obj.slug
+        else sched_race.mode_obj.slug
     )
     seed_info = await ac.avianart_service.generate_seed(
         slug,
         True,
         namespace=namespace,
-        spoiler=True if race.mode_obj.archetype_obj.spoiler else False,
+        spoiler=True if sched_race.mode_obj.archetype_obj.spoiler else False,
     )
 
-    if race.mode_obj.archetype_obj.spoiler:
-        spoiler_name = avianart_payload_to_spoiler(seed_info, upload=True)
+    if sched_race.mode_obj.archetype_obj.spoiler:
+        spoiler_name = avianart_payload_to_spoiler(seed_info, race.id, upload=True)
         if spoiler_name:
             await ac.discord_service.send_message(
                 content=f"Spoiler for seed {seed_info.response.hash} uploaded successfully: {config['s3_public_bucket_url']}/{spoiler_name}",
                 suppress_embeds=True,
             )
-            race_utc_datetime = race.time.replace(tzinfo=est).astimezone(utc)
+            race_utc_datetime = sched_race.time.replace(tzinfo=est).astimezone(utc)
             # Schedule spoiler to be posted at the same time as the seed starts
             ac.scheduler_service.scheduler.add_job(
                 post_spoiler,
                 trigger=DateTrigger(run_date=race_utc_datetime),
-                args=[spoiler_name, race_id],
+                args=[race_id],
                 id=f"post_spoiler_{race_id}",
             )
 
@@ -248,21 +201,21 @@ async def roll_seed(race_id: int):
     if race_handler:
         hash_str = seed_response_to_hash(seed_info.response)
         await race_handler.send_message(
-            f"Here is your seed: https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
+            f"Here is your seed: https://alttpr.racing/getseed.php?race={sched_race.raceId} - ({hash_str})"
         )
         await race_handler.set_bot_raceinfo(
-            f"{race.mode_obj.slug} - https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
+            f"{sched_race.mode_obj.slug} - https://alttpr.racing/getseed.php?race={sched_race.raceId} - ({hash_str})"
         )
     else:
         logger.error(f"No handler found for room: {room_name}")
 
     updated_race = ac.database_service.update_race_seed(
-        race.raceId, seed_info.response.hash
+        sched_race.raceId, seed_info.response.hash
     )
 
     if not updated_race:
         logger.error(
-            f"Failed to update race {race.raceId} with seed ID {seed_info.response.hash}."
+            f"Failed to update race {sched_race.raceId} with seed ID {seed_info.response.hash}."
         )
         admin_role = ac.database_service.get_setting("admin_role_id")
         admin_ping = f"<@&{admin_role}> " if admin_role else ""
@@ -280,18 +233,18 @@ async def roll_seed(race_id: int):
 
     racers = race_handler.data.get("entrants", [])
     savior_message = None
-    if (not race.mode_obj.archetype_obj.ladder and len(racers) == 1) or (
-        race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1
+    if (not sched_race.mode_obj.archetype_obj.ladder and len(racers) == 1) or (
+        sched_race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1
     ):
         savior_roles = ac.database_service.get_savior_roles(
-            race.mode_obj.archetype_obj.id
+            sched_race.mode_obj.archetype_obj.id
         )
         logger.debug(f"Only one racer found, pinging savior role(s).")
         if savior_roles:
             roles_str = " ".join([f"<@&{role.roleId}>" for role in savior_roles])
-        savior_message = f"{roles_str} - There is only one racer for the following race!\n**{race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}"
-        if race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1:
-            savior_message = f"{roles_str} - This is a ladder race and there are an odd number of entrants!\n**{race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}"
+        savior_message = f"{roles_str} - There is only one racer for the following race!\n**{sched_race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}"
+        if sched_race.mode_obj.archetype_obj.ladder and len(racers) % 2 == 1:
+            savior_message = f"{roles_str} - This is a ladder race and there are an odd number of entrants!\n**{sched_race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)}"
     races_channel_id = ac.database_service.get_setting("races_channel_id")
 
     if races_channel_id and savior_message:
@@ -305,13 +258,13 @@ async def ping_unready(race_id: int):
     Pings @unready in the Discord channel and racetime.
     """
 
-    race = ac.database_service.get_scheduled_race_by_id(race_id)
+    sched_race = ac.database_service.get_scheduled_race_by_id(race_id)
 
-    if not race.raceId:
-        logger.error(f"Cannot ping unready! Race {race.id} does not have a race room.")
+    if not sched_race.raceId:
+        logger.error(f"Cannot ping unready! Race {sched_race.id} does not have a race room.")
         return
 
-    room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+    room_name = ac.database_service.get_race_by_id(sched_race.raceId).raceRoom.lstrip("/")
     retry_count = 0
     while retry_count < 10:
         if room_name not in ac.racetime_service.handlers:
@@ -335,15 +288,15 @@ async def warn_partitioned_race(race_id: int):
     Warn users that the race is about to be partitioned.
     """
 
-    race = ac.database_service.get_scheduled_race_by_id(race_id)
+    sched_race = ac.database_service.get_scheduled_race_by_id(race_id)
 
-    if not race.raceId:
+    if not sched_race.raceId:
         logger.error(
-            f"Cannot warn partitioned race! Race {race.id} does not have a race room."
+            f"Cannot warn partitioned race! Race {sched_race.id} does not have a race room."
         )
         return
 
-    room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+    room_name = ac.database_service.get_race_by_id(sched_race.raceId).raceRoom.lstrip("/")
     retry_count = 0
     while retry_count < 10:
         if room_name not in ac.racetime_service.handlers:
@@ -376,17 +329,17 @@ async def force_start_race(
     """
 
     if not race_room and not ladder:
-        race = ac.database_service.get_scheduled_race_by_id(race_id)
+        sched_race = ac.database_service.get_scheduled_race_by_id(race_id)
 
-        if not race.raceId:
+        if not sched_race.raceId:
             logger.error(
-                f"Cannot force start race! Race {race.raceId} does not have a race room."
+                f"Cannot force start race! Race {sched_race.raceId} does not have a race room."
             )
             return
-        room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+        room_name = ac.database_service.get_race_by_id(sched_race.raceId).raceRoom.lstrip("/")
     elif race_room and ladder:
         room_name = race_room.lstrip("/")
-        race = ac.database_service.get_partitioned_race_by_room_name(
+        sched_race = ac.database_service.get_partitioned_race_by_room_name(
             room_name
         ).parentRace.scheduledRace
 
@@ -408,22 +361,22 @@ async def force_start_race(
         if entrant["status"]["value"] == "ready":
             ready += 1
 
-    if (ready < 2 and not race.mode_obj.archetype_obj.ladder) or (
+    if (ready < 2 and not sched_race.mode_obj.archetype_obj.ladder) or (
         (len(race_handler.data.get("entrants", [])) < 2)
-        and race.mode_obj.archetype_obj.ladder
+        and sched_race.mode_obj.archetype_obj.ladder
     ):
         logger.error(
-            f"Not enough ready players to force start race {race.raceId}. Cancelling."
+            f"Not enough ready players to force start race {sched_race.raceId}. Cancelling."
         )
         await ac.discord_service.send_message(
-            content=f"Not enough ready players to force start race {race.raceId}. Cancelling."
+            content=f"Not enough ready players to force start race {sched_race.raceId}. Cancelling."
         )
         await race_handler.send_message(
             "Not enough ready players to start the race! Race cancelled."
         )
 
         # Cleanup scheduled jobs for spoiler
-        if race.mode_obj.archetype_obj.spoiler:
+        if sched_race.mode_obj.archetype_obj.spoiler:
             all_jobs = ac.scheduler_service.scheduler.get_jobs()
             race_jobs = [
                 x
@@ -442,13 +395,13 @@ async def force_start_race(
     try:
         await race_handler.force_start()
     except Exception as e:
-        logger.error(f"Failed to force start race {race.raceId}: {e}")
+        logger.error(f"Failed to force start race {sched_race.raceId}: {e}")
 
         admin_role = ac.database_service.get_setting("admin_role_id")
         admin_ping = f"<@&{admin_role}> " if admin_role else ""
 
         await ac.discord_service.send_message(
-            content=f"{admin_ping}Failed to force start race {race.raceId}: {e}",
+            content=f"{admin_ping}Failed to force start race {sched_race.raceId}: {e}",
             force_mention=True,
         )
     post_race_channel_id = ac.database_service.get_setting("post_race_channel_id")
@@ -458,7 +411,7 @@ async def force_start_race(
             await ac.discord_service.bot.rest.create_thread(
                 post_race_channel_id,
                 hikari.ChannelType.GUILD_PUBLIC_THREAD,
-                f"[{race.mode_obj.archetype_obj.name}] {race.mode_obj.name} - {room_name.split('/')[-1]} ",
+                f"[{sched_race.mode_obj.archetype_obj.name}] {sched_race.mode_obj.name} - {room_name.split('/')[-1]} ",
             )
         )
 
@@ -470,8 +423,8 @@ async def post_prep_time_left(
     remaining_time_minutes: int = None,
     remaining_time_seconds: int = None,
 ):
-    race = ac.database_service.get_scheduled_race_by_id(race_id)
-    room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+    sched_race = ac.database_service.get_scheduled_race_by_id(race_id)
+    room_name = ac.database_service.get_race_by_id(sched_race.raceId).raceRoom.lstrip("/")
 
     race_handler: LadderRaceHandler = ac.racetime_service.handler_objects.get(
         room_name, None
@@ -495,13 +448,14 @@ async def post_prep_time_left(
 
 
 async def post_spoiler(
-    spoiler_name: str, race_id: int = None, prep_time_minutes: int = 15
+    race_id: int = None, prep_time_minutes: int = 15
 ):
     """
     Posts the spoiler for the race to the racetime chat. Must pin this message in the channel for it to be visible.
     """
-    race = ac.database_service.get_scheduled_race_by_id(race_id)
-    room_name = ac.database_service.get_race_by_id(race.raceId).raceRoom.lstrip("/")
+    sched_race = ac.database_service.get_scheduled_race_by_id(race_id)
+    race = ac.database_service.get_race_by_id(sched_race.raceId)
+    room_name = race.raceRoom.lstrip("/")
 
     race_handler: LadderRaceHandler = ac.racetime_service.handler_objects.get(
         room_name, None
@@ -518,16 +472,16 @@ async def post_spoiler(
             force_mention=True,
         )
         return
-
+    
     # Pinned messages get sent to the top of the chat, so we send the spoiler as a pinned message first,
     # then again as a normal message so it doesn't get buried in the chat but is still visible.
     await race_handler.send_message(
-        f"Spoiler for this seed: {config['s3_public_bucket_url']}/{spoiler_name}",
+        f"Spoiler for this seed: {race.spoilerUrl}",
         pinned=True,
     )
 
     await race_handler.send_message(
-        f"Spoiler for this seed: {config['s3_public_bucket_url']}/{spoiler_name}",
+        f"Spoiler for this seed: {race.spoilerUrl}",
     )
     if prep_time_minutes > 0:
         await race_handler.send_message(
@@ -638,113 +592,3 @@ def convert_hash(hash_str: str) -> str:
         ]
     )
     return hash_str
-
-
-def find_jsonrom_byte(patch_data, address):
-    target = int(address, 16) if isinstance(address, str) else int(address)
-    for start_str, values in patch_data.items():
-        start = int(start_str)
-        if start <= target < start + len(values):
-            return values[target - start]
-    return None
-
-
-def add_extra_info_to_spoiler(seed: AvianResponsePayload) -> dict:
-    """Not everything is available in the spoiler yet, so we need to add some extra info by parsing the patch data."""
-    spoiler = seed.response.spoiler.copy()
-    spoiler["Special"]["DiggingGameDigs"] = find_jsonrom_byte(
-        seed.response.patch, 0x180020
-    )
-    spoiler["Drops"] = {}
-    spoiler["Drops"]["PullTree"] = {}
-    spoiler["Drops"]["PullTree"]["Tier1"] = possible_mem_locs_to_prizes[
-        find_jsonrom_byte(seed.response.patch, (0xEFBD4))
-    ]
-    spoiler["Drops"]["PullTree"]["Tier2"] = possible_mem_locs_to_prizes[
-        find_jsonrom_byte(seed.response.patch, (0xEFBD5))
-    ]
-    spoiler["Drops"]["PullTree"]["Tier3"] = possible_mem_locs_to_prizes[
-        find_jsonrom_byte(seed.response.patch, (0xEFBD6))
-    ]
-
-    spoiler["Drops"]["RupeeCrab"] = {}
-    spoiler["Drops"]["RupeeCrab"]["Main"] = possible_mem_locs_to_prizes[
-        find_jsonrom_byte(seed.response.patch, 0x329C8)
-    ]
-    spoiler["Drops"]["RupeeCrab"]["Final"] = possible_mem_locs_to_prizes[
-        find_jsonrom_byte(seed.response.patch, 0x329C4)
-    ]
-
-    spoiler["Drops"]["Stun"] = possible_mem_locs_to_prizes[
-        find_jsonrom_byte(seed.response.patch, 0x37993)
-    ]
-    spoiler["Drops"]["FishSave"] = possible_mem_locs_to_prizes[
-        find_jsonrom_byte(seed.response.patch, 0xE82CC)
-    ]
-
-    spoiler["PrizePacks"] = {}
-
-    prize_vals = []
-    prizes_loc = 0x37A78
-    for i in range(7):
-        pack = []
-        for j in range(8):
-            prize = possible_mem_locs_to_prizes[
-                find_jsonrom_byte(seed.response.patch, prizes_loc + (i * 8 + j))
-            ]
-            pack.append(prize)
-        prize_vals.append(pack)
-
-    for group_index, prize_pack_set in enumerate(prize_vals, 1):
-        group_name = ENEMY_GROUP_NAMES.get(group_index, f"Group{group_index}")
-        prize_pack_name = get_prize_pack_name(prize_pack_set)
-        spoiler["PrizePacks"][group_name] = prize_pack_name
-        # drop_order = ', '.join(prize_pack_set)
-        # spoiler["PrizePacks"][group_name] = {
-        #     f'PrizePackName': prize_pack_name,
-        #     f'DropOrder': drop_order,
-        # }
-
-    return spoiler
-
-
-def avianart_payload_to_spoiler(
-    seed: AvianResponsePayload, upload: bool = True
-) -> Path | None:
-    json_spoiler_tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", encoding="utf-8", delete=False
-    )
-    spoiler = add_extra_info_to_spoiler(seed)
-
-    try:
-        json.dump(spoiler, json_spoiler_tmp)
-        json_spoiler_tmp.flush()
-        json_spoiler_tmp.close()
-
-        transformed_output = (
-            Path(tempfile.gettempdir())
-            / f"Spoiler_StepLadder_{seed.response.hash}_{'-'.join(spoiler['meta']['hash'].split(',')).replace(' ', '')}.json"
-        )
-        spoiler_converter.transform(json_spoiler_tmp.name, transformed_output)
-    finally:
-        try:
-            Path(json_spoiler_tmp.name).unlink(missing_ok=True)
-        except OSError:
-            pass
-    if upload:
-        uploaded = ac.s3_service.upload_file(
-            str(transformed_output), transformed_output.name
-        )
-
-        if uploaded:
-            logger.info(
-                f"Spoiler file {transformed_output} uploaded successfully to S3."
-            )
-            os.remove(transformed_output)
-            return transformed_output.name
-        else:
-            logger.error(f"Failed to upload spoiler file {transformed_output} to S3.")
-            return None
-
-    logger.info(f"Transformed spoiler file saved to {transformed_output}")
-    return transformed_output

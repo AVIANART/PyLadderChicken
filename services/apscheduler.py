@@ -12,7 +12,7 @@ from services.racetime import RacetimeService
 from services.discord import DiscordService
 from services.database import DatabaseService
 
-import utils
+import utils.race_utils as race_utils
 import app_context as ac
 
 
@@ -85,7 +85,7 @@ class APSchedulerService:
         self.logger.info(f"Scheduling ladder race {race.id} at {race_utc_datetime} UTC")
 
         self.scheduler.add_job(
-            utils.open_race_room,
+            race_utils.open_race_room,
             trigger=DateTrigger(
                 race_utc_datetime - datetime.timedelta(minutes=open_mins_before_start),
                 timezone=utc,
@@ -106,7 +106,7 @@ class APSchedulerService:
         )
 
         self.scheduler.add_job(
-            utils.roll_seed,
+            race_utils.roll_seed,
             trigger=DateTrigger(
                 race_utc_datetime - datetime.timedelta(minutes=10),
                 timezone=utc,
@@ -125,7 +125,7 @@ class APSchedulerService:
 
         if not race.mode_obj.archetype_obj.ladder:
             self.scheduler.add_job(
-                utils.ping_unready,
+                race_utils.ping_unready,
                 trigger=DateTrigger(
                     race_utc_datetime - datetime.timedelta(minutes=1),
                     timezone=utc,
@@ -136,7 +136,7 @@ class APSchedulerService:
             )
 
             self.scheduler.add_job(
-                utils.force_start_race,
+                race_utils.force_start_race,
                 trigger=DateTrigger(
                     race_utc_datetime - datetime.timedelta(seconds=15),
                     timezone=utc,
@@ -147,7 +147,7 @@ class APSchedulerService:
             )
         else:
             self.scheduler.add_job(
-                utils.warn_partitioned_race,
+                race_utils.warn_partitioned_race,
                 trigger=DateTrigger(
                     race_utc_datetime - datetime.timedelta(minutes=3),
                     timezone=utc,
@@ -158,7 +158,7 @@ class APSchedulerService:
             )
 
             self.scheduler.add_job(
-                utils.force_start_race,
+                race_utils.force_start_race,
                 trigger=DateTrigger(
                     race_utc_datetime - datetime.timedelta(minutes=2),
                     timezone=utc,

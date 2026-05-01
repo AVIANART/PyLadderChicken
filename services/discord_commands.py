@@ -1,6 +1,6 @@
 import schemas
 from services.racetime import LadderRaceHandler
-import utils
+import utils.race_utils as race_utils
 import zoneinfo
 import logging
 import lightbulb
@@ -183,9 +183,9 @@ class OpenRoomCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        room = await utils.open_race_room(race_id=ctx.options[0].value)
+        room = await race_utils.open_race_room(race_id=self.race_id)
         if room:
-            await ctx.respond(f"Room opened for race {ctx.options[0].value}: {room}")
+            await ctx.respond(f"Room opened for race {self.race_id}: {room}")
         else:
             await ctx.respond("Failed to open room. Please check the race ID.")
 
@@ -206,7 +206,7 @@ class AddScheduledRaceCommand(
 
     hour = lightbulb.integer(
         "hour",
-        "The hour of the scheduled race. Defaults to the next hour.",
+        "The hour of the scheduled race.",
         min_value=0,
         max_value=23,
     )
@@ -220,23 +220,23 @@ class AddScheduledRaceCommand(
     day = lightbulb.integer(
         "day",
         "The day of the scheduled race. Defaults to the current day.",
-        default=datetime.datetime.now(tz=est).day,
+        default=None,
         min_value=1,
         max_value=31,
     )
     month = lightbulb.integer(
         "month",
         "The month of the scheduled race. Defaults to the current month.",
-        default=datetime.datetime.now(tz=est).month,
+        default=None,
         min_value=1,
         max_value=12,
     )
     year = lightbulb.integer(
         "year",
         "The year of the scheduled race. Defaults to the current year.",
-        default=datetime.datetime.now(tz=est).year,
-        min_value=datetime.datetime.now(tz=est).year,
-        max_value=datetime.datetime.now(tz=est).year + 2,
+        default=None,
+        min_value=2024,
+        max_value=2100,
     )
     mins_before_start = lightbulb.integer(
         "mins_before_start",
@@ -245,44 +245,40 @@ class AddScheduledRaceCommand(
         min_value=12,
         max_value=60,
     )
+    season = lightbulb.integer(
+        "season",
+        "The season of the scheduled race. Defaults to 1.",
+        default=1,
+        min_value=1,
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {
-            "hour": datetime.datetime.now(tz=est).hour + 1,
-            "minute": 0,
-            "day": datetime.datetime.now(tz=est).day,
-            "month": datetime.datetime.now(tz=est).month,
-            "year": datetime.datetime.now(tz=est).year,
-            "mode": "None",
-            "mins_before_start": 30,
-        }
-
-        for option in ctx.interaction.options:
-            results[option.name] = option.value
-
+        now = datetime.datetime.now(tz=est)
         dt = datetime.datetime(
-            year=results["year"],
-            month=results["month"],
-            day=results["day"],
-            hour=results["hour"],
-            minute=results["minute"],
+            year=self.year or now.year,
+            month=self.month or now.month,
+            day=self.day or now.day,
+            hour=self.hour,
+            minute=self.minute,
             tzinfo=est,
         )
         new_race = schemas.ScheduledRaceWrite(
             time=dt,
-            season=1,  # TODO: Make this dynamic
-            mode=results["mode"],
+            season=self.season,  # TODO: Make this dynamic
+            mode=self.mode,
         )
         new_race = ac.database_service.add_race_to_schedule(new_race)
 
         ac.scheduler_service.schedule_race(
-            new_race.id, open_mins_before_start=results["mins_before_start"]
+            new_race.id, open_mins_before_start=self.mins_before_start
         )
         modes = {mode.id: mode.name for mode in ac.database_service.get_modes()}
 
         await ctx.respond(
-            f"Adding scheduled race {modes.get(results['mode'], 'Unknown')} at {results['year']}-{results['month']:02d}-{results['day']:02d} {results['hour']:02d}:{results['minute']:02d}:00 EST (room will open {results['mins_before_start']} minutes before start time).",
+            f"Adding scheduled race {modes.get(self.mode, 'Unknown')} at "
+            f"{dt.year}-{dt.month:02d}-{dt.day:02d} {dt.hour:02d}:{dt.minute:02d}:00 EST "
+            f"(room will open {self.mins_before_start} minutes before start time).",
         )
 
 
@@ -300,15 +296,9 @@ class SetPostRaceChannelCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {
-            "channel": None,
-        }
-
-        for option in ctx.interaction.options:
-            results[option.name] = option.value
-
-        ac.database_service.set_setting("post_race_channel_id", results["channel"])
-        await ctx.respond(f"Set post-race channel to <#{results['channel']}>.")
+        channel_id = self.channel.id
+        ac.database_service.set_setting("post_race_channel_id", channel_id)
+        await ctx.respond(f"Set post-race channel to <#{channel_id}>.")
 
 
 @loader.command()
@@ -324,15 +314,9 @@ class SetRacesChannelCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {
-            "channel": None,
-        }
-
-        for option in ctx.interaction.options:
-            results[option.name] = option.value
-
-        ac.database_service.set_setting("races_channel_id", results["channel"])
-        await ctx.respond(f"Set races channel to <#{results['channel']}>.")
+        channel_id = self.channel.id
+        ac.database_service.set_setting("races_channel_id", channel_id)
+        await ctx.respond(f"Set races channel to <#{channel_id}>.")
 
 
 @loader.command()
@@ -348,15 +332,9 @@ class SetBotLoggingChannelCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {
-            "channel": None,
-        }
-
-        for option in ctx.interaction.options:
-            results[option.name] = option.value
-
-        ac.database_service.set_setting("bot_logging_channel_id", results["channel"])
-        await ctx.respond(f"Set bot logging channel to <#{results['channel']}>.")
+        channel_id = self.channel.id
+        ac.database_service.set_setting("bot_logging_channel_id", channel_id)
+        await ctx.respond(f"Set bot logging channel to <#{channel_id}>.")
 
 
 @loader.command()
@@ -372,15 +350,8 @@ class SetAdminRoleCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {
-            "role": None,
-        }
-
-        for option in ctx.interaction.options:
-            results[option.name] = option.value
-
-        ac.database_service.set_setting("admin_role_id", str(results["role"]))
-        await ctx.respond(f"Set admin role to <@&{results['role']}>.")
+        ac.database_service.set_setting("admin_role_id", str(self.role))
+        await ctx.respond(f"Set admin role to <@&{self.role}>.")
 
 
 @loader.command()
@@ -406,14 +377,6 @@ class ScheduleCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {
-            "num_races": 10,
-            "force_new": False,
-        }
-
-        for option in ctx.interaction.options:
-            results[option.name] = option.value
-
         # Do we already have a message for the schedule?
         schedule_message_id = ac.database_service.get_setting("schedule_message_id")
         schedule_channel_id = ac.database_service.get_setting("schedule_channel_id")
@@ -422,7 +385,7 @@ class ScheduleCommand(
             not schedule_message_id
             or not schedule_channel_id
             or not schedule_num_races
-            or results["force_new"]
+            or self.force_new
         ):
             # If not, create a new message
             if schedule_message_id and schedule_channel_id:
@@ -443,7 +406,7 @@ class ScheduleCommand(
             ac.database_service.set_setting(
                 "schedule_channel_id", schedule_message.channel_id
             )
-            ac.database_service.set_setting("schedule_num_races", results["num_races"])
+            ac.database_service.set_setting("schedule_num_races", self.num_races)
             schedule_message_id = schedule_message.id
         else:
             # If we do, edit the existing message
@@ -451,7 +414,7 @@ class ScheduleCommand(
                 f"Updating the scheduled races (https://discord.com/channels/{ctx.guild_id}/{schedule_channel_id}/{schedule_message_id}). Use force_new to replace the old message with a new schedule message.",
                 ephemeral=True,
             )
-        await utils.update_schedule_message()
+        await race_utils.update_schedule_message()
 
 
 @loader.command()
@@ -475,8 +438,7 @@ class DelayRaceCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-        race_id = results["race_id"]
+        race_id = self.race_id
         race = ac.database_service.get_race_by_id(race_id=race_id)
         if not race:
             await ctx.respond(f"Race with ID {race_id} not found.", ephemeral=True)
@@ -491,12 +453,12 @@ class DelayRaceCommand(
             )
             return
         jobs_delayed = ac.scheduler_service.delay_race_start(
-            race_id, results["delay_minutes"]
+            race_id, self.delay_minutes
         )
         if jobs_delayed:
             await ctx.respond(f"Delayed {jobs_delayed} jobs for race {race_id}.")
             await race_handler.send_message(
-                f'This race has been delayed by {results["delay_minutes"]} minutes.'
+                f"This race has been delayed by {self.delay_minutes} minutes."
             )
         else:
             await ctx.respond(
@@ -523,9 +485,8 @@ class SetRaceSeedCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-        race_id = results["race_id"]
-        seed_hash = results["seed_hash"]
+        race_id = self.race_id
+        seed_hash = self.seed_hash
         race = ac.database_service.get_race_by_id(race_id=race_id)
         if not race:
             await ctx.respond(f"Race with ID {race_id} not found.", ephemeral=True)
@@ -550,7 +511,7 @@ class SetRaceSeedCommand(
                 ephemeral=True,
             )
             return
-        hash_str = utils.seed_response_to_hash(seed_info.response)
+        hash_str = race_utils.seed_response_to_hash(seed_info.response)
 
         await race_handler.send_message(
             f"Here is your seed: https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
@@ -600,8 +561,7 @@ class AddSaviorRoleCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-        archetype = ac.database_service.get_archetype_by_id(results["archetype"])
+        archetype = ac.database_service.get_archetype_by_id(self.archetype)
         if archetype.saviorRoles:
             for role in archetype.saviorRoles:
                 ac.database_service.delete_savior_role(role.archetypeId, role.roleId)
@@ -610,13 +570,14 @@ class AddSaviorRoleCommand(
             await ctx.respond("Invalid archetype selected.", ephemeral=True)
             return
 
+        role_id = str(self.role)
         savior_role = schemas.SaviorRoleWrite(
             archetypeId=archetype.id,
-            roleId=str(results["role"]),
+            roleId=role_id,
         )
-        role = ac.database_service.add_savior_role(savior_role)
+        ac.database_service.add_savior_role(savior_role)
         await ctx.respond(
-            f"Set savior role <@&{str(results["role"])}> for {archetype.name}."
+            f"Set savior role <@&{role_id}> for {archetype.name}."
         )
 
 
@@ -639,11 +600,10 @@ class SetAllSaviorRolesCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-        role_id = str(results["role"])
+        role_id = str(self.role)
         archetypes = ac.database_service.get_archetypes()
         for archetype in archetypes:
-            if not results["overwrite"] and archetype.saviorRoles:
+            if not self.overwrite and archetype.saviorRoles:
                 continue
             if archetype.saviorRoles:
                 for existing_role in archetype.saviorRoles:
@@ -655,7 +615,7 @@ class SetAllSaviorRolesCommand(
                 roleId=role_id,
             )
             ac.database_service.add_savior_role(savior_role)
-        if results["overwrite"]:
+        if self.overwrite:
             await ctx.respond(
                 f"Overwrote savior roles for all archetypes with <@&{role_id}>."
             )
@@ -689,16 +649,7 @@ class RollSeedCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {
-            "race": self.race,
-            "spoiler": self.spoiler,
-        }
-
-        for option in ctx.interaction.options:
-            results[option.name] = option.value
-
-        mode_id = results["mode"]
-        mode = ac.database_service.get_mode_by_id(mode_id)
+        mode = ac.database_service.get_mode_by_id(self.mode)
         if not mode:
             await ctx.respond("Invalid mode selected.", ephemeral=True)
             return
@@ -708,12 +659,12 @@ class RollSeedCommand(
         await ctx.defer(ephemeral=True)
         seed = await ac.avianart_service.generate_seed(
             preset=preset,
-            race=results["race"],
+            race=self.race,
             namespace=namespace,
-            spoiler=results["spoiler"],
+            spoiler=self.spoiler,
         )
-        if results["spoiler"]:
-            spoiler_name = utils.avianart_payload_to_spoiler(seed, upload=True)
+        if self.spoiler:
+            spoiler_name = race_utils.spoiler_utils.avianart_payload_to_spoiler(seed, upload=True)
 
             await ctx.respond(
                 f"""You selected **[{mode.archetype_obj.name}] {mode.name}** ({slug})
@@ -729,10 +680,9 @@ Seed: https://avianart.games/perm/{seed.response.hash}""",
             )
 
 
-def _collect_role_ids(results: dict, keys: list[str]) -> list[str]:
+def _collect_role_ids(values) -> list[str]:
     role_ids: list[str] = []
-    for key in keys:
-        value = results.get(key)
+    for value in values:
         if value is None:
             continue
         role_id = str(value)
@@ -772,17 +722,15 @@ class AddArchetypeCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-
         archetype = ac.database_service.add_archetype(
             schemas.ArchetypeWrite(
-                name=results["name"],
-                ladder=bool(results.get("ladder", False)),
+                name=self.name,
+                ladder=bool(self.ladder),
             )
         )
 
         role_ids = _collect_role_ids(
-            results, ["pingable_role_1", "pingable_role_2", "pingable_role_3"]
+            [self.pingable_role_1, self.pingable_role_2, self.pingable_role_3]
         )
         for role_id in role_ids:
             ac.database_service.add_pingable_archetype_role(
@@ -843,9 +791,7 @@ class AddModeCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-
-        archetype_id = int(results["archetype"])
+        archetype_id = int(self.archetype)
         archetype = ac.database_service.get_archetype_by_id(archetype_id)
         if not archetype:
             await ctx.respond("Invalid archetype selected.", ephemeral=True)
@@ -854,14 +800,14 @@ class AddModeCommand(
         mode = ac.database_service.add_mode(
             schemas.ModeWrite(
                 archetype=archetype_id,
-                name=results["name"],
-                slug=results["slug"],
-                description=results.get("description"),
+                name=self.name,
+                slug=self.slug,
+                description=self.description,
             )
         )
 
         role_ids = _collect_role_ids(
-            results, ["pingable_role_1", "pingable_role_2", "pingable_role_3"]
+            [self.pingable_role_1, self.pingable_role_2, self.pingable_role_3]
         )
         for role_id in role_ids:
             ac.database_service.add_pingable_mode_role(
@@ -901,14 +847,13 @@ class AddPingableArchetypeRoleCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-        archetype_id = int(results["archetype"])
+        archetype_id = int(self.archetype)
         archetype = ac.database_service.get_archetype_by_id(archetype_id)
         if not archetype:
             await ctx.respond("Invalid archetype selected.", ephemeral=True)
             return
 
-        role_id = str(results["role"])
+        role_id = str(self.role)
         ac.database_service.add_pingable_archetype_role(
             schemas.PingableArchetypeRoleWrite(
                 archetypeId=archetype_id,
@@ -939,14 +884,13 @@ class AddPingableModeRoleCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-        mode_id = int(results["mode"])
+        mode_id = int(self.mode)
         mode = ac.database_service.get_mode_by_id(mode_id)
         if not mode:
             await ctx.respond("Invalid mode selected.", ephemeral=True)
             return
 
-        role_id = str(results["role"])
+        role_id = str(self.role)
         ac.database_service.add_pingable_mode_role(
             schemas.PingableModeRoleWrite(
                 modeId=mode_id,
@@ -978,14 +922,13 @@ class RemovePingableArchetypeRoleCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-        archetype_id = int(results["archetype"])
+        archetype_id = int(self.archetype)
         archetype = ac.database_service.get_archetype_by_id(archetype_id)
         if not archetype:
             await ctx.respond("Invalid archetype selected.", ephemeral=True)
             return
 
-        role_id = str(results["role"])
+        role_id = str(self.role)
         deleted = ac.database_service.delete_pingable_archetype_role(
             archetype_id, role_id
         )
@@ -1020,14 +963,13 @@ class RemovePingableModeRoleCommand(
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        results = {i.name: i.value for i in ctx.interaction.options}
-        mode_id = int(results["mode"])
+        mode_id = int(self.mode)
         mode = ac.database_service.get_mode_by_id(mode_id)
         if not mode:
             await ctx.respond("Invalid mode selected.", ephemeral=True)
             return
 
-        role_id = str(results["role"])
+        role_id = str(self.role)
         deleted = ac.database_service.delete_pingable_mode_role(mode_id, role_id)
         if deleted:
             await ctx.respond(
@@ -1038,3 +980,30 @@ class RemovePingableModeRoleCommand(
                 f"No pingable role <@&{role_id}> found on mode **[{mode.archetype_obj.name}] {mode.name}**.",
                 ephemeral=True,
             )
+
+@loader.command()
+class SetSpoilerUrl(
+    lightbulb.SlashCommand,
+    name="set_spoiler_url",
+    description="Set the spoiler URL for a race.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    race_id = lightbulb.integer(
+        "race_id",
+        "The ID of the race to upload the spoiler for.",
+        autocomplete=autocomplete_races,
+    )
+    spoiler_url = lightbulb.string(
+        "spoiler_url",
+        "The URL of the spoiler log to set for the race.",
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        if not self.spoiler_url.startswith("http://") and not self.spoiler_url.startswith("https://"):
+            await ctx.respond("Invalid URL provided. Please provide a valid URL starting with http:// or https://", ephemeral=True)
+            return
+
+        ac.database_service.set_spoiler_url(self.race_id, self.spoiler_url)
+        await ctx.respond(f"Spoiler URL for race {self.race_id} set to {self.spoiler_url}.")
+

@@ -4,7 +4,7 @@ import json
 import zoneinfo
 
 import schemas
-import utils
+import utils.race_utils as race_utils
 from .racetime_bot_extended import ExtendedRacetimeBot
 import logging
 from racetime_bot import RaceHandler
@@ -133,7 +133,7 @@ class LadderRaceHandler(RaceHandler):
                 )
 
                 ac.scheduler_service.scheduler.add_job(
-                    utils.force_start_race,
+                    race_utils.force_start_race,
                     trigger=DateTrigger(
                         race_utc_datetime - datetime.timedelta(seconds=15),
                         timezone=utc,

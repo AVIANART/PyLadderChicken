@@ -12,7 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from config import import_config
 import asyncio
 import app_context
-import utils
+import utils.race_utils as race_utils
 
 
 async def main():
@@ -63,12 +63,12 @@ async def main():
     app_context.set_services(avianart, racetime, discord, database, scheduler, s3)
     await asyncio.sleep(5)
 
-    await utils.schedule_future_races()
+    await race_utils.schedule_future_races()
 
     # Check each day for any new races that need to be scheduled
     # Run at 00:45 every day, should never fire when there is other work to do
     scheduler.scheduler.add_job(
-        utils.schedule_future_races,
+        race_utils.schedule_future_races,
         CronTrigger(hour="0", minute="45"),
         id="schedule_future_races",
         replace_existing=True,

@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload, Session
 import models
 import datetime
 import schemas
-import utils
+import utils.race_utils as race_utils
 
 
 utc = zoneinfo.ZoneInfo("UTC")
@@ -114,7 +114,7 @@ class DatabaseService:
                         models.Mode.archetype_obj
                     )
                 )
-                .filter(models.ScheduledRace.time > utils.estnow())
+                .filter(models.ScheduledRace.time > race_utils.estnow())
                 .order_by(models.ScheduledRace.time)
                 .first()
             )
@@ -177,7 +177,7 @@ class DatabaseService:
                 )
                 .filter(
                     models.ScheduledRace.time
-                    < utils.estnow() + datetime.timedelta(minutes=mins_before_start)
+                    < race_utils.estnow() + datetime.timedelta(minutes=mins_before_start)
                 )
                 .order_by(models.ScheduledRace.time.desc())
                 .first()
@@ -231,7 +231,7 @@ class DatabaseService:
                     .filter(
                         models.ScheduledRace.time
                         > (
-                            utils.estnow()
+                            race_utils.estnow()
                             + datetime.timedelta(minutes=mins_before_start)
                         )
                     )
@@ -249,7 +249,7 @@ class DatabaseService:
                     .filter(
                         models.ScheduledRace.time
                         > (
-                            utils.estnow()
+                            race_utils.estnow()
                             + datetime.timedelta(minutes=mins_before_start)
                         )
                     )
@@ -509,3 +509,13 @@ class DatabaseService:
                 self.get_modes.cache_clear()
                 return True
             return False
+
+    def add_spoiler_to_race(self, race_id: int, spoiler_url: str):
+        with Session(self.engine) as db:
+            race = db.query(models.Race).filter(models.Race.id == race_id).first()
+            if race:
+                race.spoilerUrl = spoiler_url
+                db.commit()
+                db.refresh(race)
+                return race
+            return None

@@ -43,6 +43,9 @@ class Mode(Base):
     scheduledRaces: Mapped[List["ScheduledRace"]] = relationship(
         back_populates="mode_obj"
     )
+    firedRaces: Mapped[List["Race"]] = relationship(
+        back_populates="rolledMode"
+    )
 
 
 class Race(Base):
@@ -51,7 +54,12 @@ class Race(Base):
     raceActive: Mapped[Optional[bool]] = mapped_column(BIT, nullable=True, default=True)
     raceRoom: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
     seed: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
+    mode: Mapped[Optional[int]] = mapped_column(
+        SMALLINT, ForeignKey("modes.id"), nullable=True
+    )
+    spoilerUrl: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
 
+    rolledMode: Mapped[Optional["Mode"]] = relationship("Mode", foreign_keys=[mode])
     scheduledRace: Mapped["ScheduledRace"] = relationship(back_populates="race")
     partitionedRaces: Mapped[List["PartitionedRace"]] = relationship(
         back_populates="parentRace",
