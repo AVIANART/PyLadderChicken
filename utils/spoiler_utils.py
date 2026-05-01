@@ -130,7 +130,7 @@ def add_extra_info_to_spoiler(seed: AvianResponsePayload) -> dict:
 
 
 def avianart_payload_to_spoiler(
-    seed: AvianResponsePayload, race_id: int, upload: bool = True
+    seed: AvianResponsePayload, upload: bool = True, race_id: int | None = None
 ) -> Path | None:
     json_spoiler_tmp = tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", encoding="utf-8", delete=False
@@ -160,7 +160,8 @@ def avianart_payload_to_spoiler(
             logger.info(
                 f"Spoiler file {transformed_output} uploaded successfully to S3."
             )
-            ac.database_service.add_spoiler_to_race(race_id, f"{config['s3_public_bucket_url']}/{transformed_output.name}")
+            if race_id:
+                ac.database_service.add_spoiler_to_race(race_id, f"{config['s3_public_bucket_url']}/{transformed_output.name}")
             os.remove(transformed_output)
             return transformed_output.name
         else:

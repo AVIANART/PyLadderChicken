@@ -158,7 +158,7 @@ async def roll_seed(race_id: int):
     )
 
     if race.rolledMode.archetype_obj.spoiler:
-        spoiler_name = avianart_payload_to_spoiler(seed_info, race.id, upload=True)
+        spoiler_name = avianart_payload_to_spoiler(seed_info, upload=True, race_id=race.id)
         if spoiler_name:
             await ac.discord_service.send_message(
                 content=f"Spoiler for seed {seed_info.response.hash} uploaded successfully: {config['s3_public_bucket_url']}/{spoiler_name}",
