@@ -81,8 +81,10 @@ async def open_race_room(race_id: int):
 
     race_kwargs = ladder_kwargs.copy()
 
+    race_kwargs['goal'] = f"Beat the game ({sched_race.mode_obj.archetype_obj.name.capitalize()})"
+
     if sched_race.mode_obj.archetype_obj.ladder:
-        race_kwargs["goal"] = f"Beat The Game (1v1)"
+        race_kwargs["goal"] = f"Beat the game (1v1)"
         race_kwargs["partitionable"] = True
         # race_kwargs['hide_entrants'] = True
 
