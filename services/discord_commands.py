@@ -1007,3 +1007,153 @@ class SetSpoilerUrl(
         ac.database_service.set_spoiler_url(self.race_id, self.spoiler_url)
         await ctx.respond(f"Spoiler URL for race {self.race_id} set to {self.spoiler_url}.")
 
+@loader.command()
+class SetGrabbagDecayPercentage(
+    lightbulb.SlashCommand,
+    name="set_grabbag_decay_percentage",
+    description="Set the decay percentage for grabbag mode selection.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    decay_percentage = lightbulb.number(
+        "decay_percentage",
+        "Decay percentage per previously rolled mode",
+        min_value=0,
+        max_value=100,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        ac.database_service.set_setting("grabbag_decay_percentage", self.decay_percentage / 100)
+        await ctx.respond(f"Set grabbag decay percentage to {self.decay_percentage}%.")
+
+
+@loader.command()
+class AddModesToGrabbag(
+    lightbulb.SlashCommand,
+    name="add_modes_to_grabbag",
+    description="Add modes to the grabbag pool.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    mode1 = lightbulb.string(
+        "mode1",
+        "Mode to add to the grabbag pool.",
+        autocomplete=autocomplete_modes,
+    )
+    mode2 = lightbulb.string(
+        "mode2",
+        "Mode to add to the grabbag pool.",
+        autocomplete=autocomplete_modes,
+        default=None,
+    )
+    mode3 = lightbulb.string(
+        "mode3",
+        "Mode to add to the grabbag pool.",
+        autocomplete=autocomplete_modes,
+        default=None,
+    )
+    mode4 = lightbulb.string(
+        "mode4",
+        "Mode to add to the grabbag pool.",
+        autocomplete=autocomplete_modes,
+        default=None,
+    )
+    mode5 = lightbulb.string(
+        "mode5",
+        "Mode to add to the grabbag pool.",
+        autocomplete=autocomplete_modes,
+        default=None,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        mode_ids = [mode_id for mode_id in [self.mode1, self.mode2, self.mode3, self.mode4, self.mode5] if mode_id]
+        valid_mode_ids = []
+        already_in_grabbag = []
+        mode_name = {}
+
+        for mode_id in mode_ids:
+            mode = ac.database_service.get_mode_by_id(mode_id)
+            mode_name[mode_id] = f"[{mode.archetype_obj.name}] {mode.name}" if mode else mode_id
+            if not mode:
+                await ctx.respond(f"Mode ID {mode_id} is invalid and will be skipped.", ephemeral=True)
+                continue
+            if mode.grabbag:
+                already_in_grabbag.append(mode_id)
+                continue
+            valid_mode_ids.append(mode_id)
+
+
+        for mode_id in valid_mode_ids:
+            ac.database_service.enable_grabbag_for_mode(mode_id)
+
+        if valid_mode_ids:
+            await ctx.respond(f"Added modes {', '.join([mode_name[mode_id] for mode_id in valid_mode_ids])} to the grabbag pool.")
+            if len(already_in_grabbag) > 0:
+                await ctx.respond(f"Modes {', '.join([mode_name[mode_id] for mode_id in already_in_grabbag])} were already in the grabbag pool and were skipped.")
+        else:
+            await ctx.respond("No valid mode IDs provided to add to the grabbag pool.", ephemeral=True)
+
+@loader.command()
+class RemoveModesFromGrabbag(
+    lightbulb.SlashCommand,
+    name="remove_modes_from_grabbag",
+    description="Remove modes from the grabbag pool.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    mode1 = lightbulb.string(
+        "mode1",
+        "Mode to remove from the grabbag pool.",
+        autocomplete=autocomplete_modes,
+    )
+    mode2 = lightbulb.string(
+        "mode2",
+        "Mode to remove from the grabbag pool.",
+        autocomplete=autocomplete_modes,
+        default=None,
+    )
+    mode3 = lightbulb.string(
+        "mode3",
+        "Mode to remove from the grabbag pool.",
+        autocomplete=autocomplete_modes,
+        default=None,
+    )
+    mode4 = lightbulb.string(
+        "mode4",
+        "Mode to remove from the grabbag pool.",
+        autocomplete=autocomplete_modes,
+        default=None,
+    )
+    mode5 = lightbulb.string(
+        "mode5",
+        "Mode to remove from the grabbag pool.",
+        autocomplete=autocomplete_modes,
+        default=None,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        mode_ids = [mode_id for mode_id in [self.mode1, self.mode2, self.mode3, self.mode4, self.mode5] if mode_id]
+        valid_mode_ids = []
+        not_in_grabbag = []
+        mode_name = {}
+        for mode_id in mode_ids:
+            mode = ac.database_service.get_mode_by_id(mode_id)
+            mode_name[mode_id] = f"[{mode.archetype_obj.name}] {mode.name}" if mode else mode_id
+            if not mode:
+                await ctx.respond(f"Mode ID {mode_id} is invalid and will be skipped.", ephemeral=True)
+                continue
+            if not mode.grabbag:
+                not_in_grabbag.append(mode_id)
+                continue
+            valid_mode_ids.append(mode_id)
+
+
+        for mode_id in valid_mode_ids:
+            ac.database_service.disable_grabbag_for_mode(mode_id)
+
+        if valid_mode_ids:
+            await ctx.respond(f"Removed modes {', '.join([mode_name[mode_id] for mode_id in valid_mode_ids])} from the grabbag pool.")
+            if len(not_in_grabbag) > 0:
+                await ctx.respond(f"Modes {', '.join([mode_name[mode_id] for mode_id in not_in_grabbag])} were not in the grabbag pool and were skipped.")
+        else:
+            await ctx.respond("No valid mode IDs provided to remove from the grabbag pool.", ephemeral=True)

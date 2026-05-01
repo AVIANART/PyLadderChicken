@@ -7,7 +7,6 @@ import datetime
 import schemas
 import utils.race_utils as race_utils
 
-
 utc = zoneinfo.ZoneInfo("UTC")
 est = zoneinfo.ZoneInfo("US/Eastern")
 
@@ -279,7 +278,11 @@ class DatabaseService:
         with Session(self.engine) as db:
             race = (
                 db.query(models.Race)
-                .options(selectinload(models.Race.scheduledRace))
+                .options(
+                    selectinload(models.Race.scheduledRace),
+                    selectinload(models.Race.rolledMode)
+                    .selectinload(models.Mode.archetype_obj)
+                )
                 .filter(models.Race.id == race_id)
                 .first()
             )
@@ -518,4 +521,119 @@ class DatabaseService:
                 db.commit()
                 db.refresh(race)
                 return race
+            return None
+        
+    def set_rolled_race_mode(self, race_id: int, mode_id: int):
+        with Session(self.engine) as db:
+            race = db.query(models.Race).options(
+                selectinload(models.Race.rolledMode)
+                .selectinload(models.Mode.archetype_obj)
+            ).filter(models.Race.id == race_id).first()
+            if race:
+                race.mode = mode_id
+                db.commit()
+                db.refresh(race)
+                return race
+            return None
+
+    def get_seasons_races_by_mode(self, season: int, mode_id: int):
+        with Session(self.engine) as db:
+            sched_races = (
+                db.query(models.ScheduledRace)
+                .filter(
+                    models.ScheduledRace.season == season,
+                    models.ScheduledRace.mode == mode_id,
+                )
+                .all()
+            )
+            sched_race_ids = [
+                x.raceId for x in sched_races if x.raceId is not None
+            ]
+            races = (
+                db.query(models.Race)
+                .options(selectinload(models.Race.rolledMode))
+                .filter(models.Race.id.in_(sched_race_ids))
+                .all()
+            )
+            return races
+        
+    def get_seasons_grabbag_races(self, season: int):
+        with Session(self.engine) as db:
+            sched_races = (
+                db.query(models.ScheduledRace)
+                .join(models.ScheduledRace.mode_obj)
+                .filter(
+                    models.ScheduledRace.season == season,
+                    models.Mode.slug == 'ladder/grabbag',
+                )
+                .all()
+            )
+            sched_race_ids = [
+                x.raceId for x in sched_races if x.raceId is not None
+            ]
+            races = (
+                db.query(models.Race)
+                .options(selectinload(models.Race.rolledMode))
+                .filter(models.Race.id.in_(sched_race_ids))
+                .all()
+            )
+            return races
+        
+    def get_grabbag_enabled_modes(self):
+        with Session(self.engine) as db:
+            modes = (
+                db.query(models.Mode)
+                .options(selectinload(models.Mode.archetype_obj))
+                .filter(models.Mode.grabbag == True)
+                .all()
+            )
+            return modes
+        
+
+    def get_current_season(self):
+        with Session(self.engine) as db:
+            # Get next scheduled race and use its season as current season
+            next_race = (
+                db.query(models.ScheduledRace)
+                .filter(models.ScheduledRace.time > datetime.datetime.now())
+                .order_by(models.ScheduledRace.time.asc())
+                .first()
+            )
+            if next_race:
+                return next_race.season
+            return None
+        
+    def get_all_races(self):
+        with Session(self.engine) as db:
+            # Get next scheduled race and use its season as current season
+            races = (
+                db.query(models.Race)
+                .options(
+                    selectinload(models.Race.rolledMode).selectinload(
+                        models.Mode.archetype_obj
+                    )
+                ).all()
+            )
+            return races
+        
+    def enable_grabbag_for_mode(self, mode_id: int):
+        with Session(self.engine) as db:
+            mode = db.query(models.Mode).filter(models.Mode.id == mode_id).first()
+            if mode:
+                mode.grabbag = True
+                db.commit()
+                db.refresh(mode)
+                self.get_modes.cache_clear()
+                return mode
+            return None
+        
+    def disable_grabbag_for_mode(self, mode_id: int):
+        with Session(self.engine) as db:
+            mode = db.query(models.Mode).filter(models.Mode.id == mode_id).first()
+            if mode:
+                mode.grabbag = False
+                db.commit()
+                db.refresh(mode)
+                self.get_modes.cache_clear()
+                return mode
             return None

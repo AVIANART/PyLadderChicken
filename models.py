@@ -35,6 +35,8 @@ class Mode(Base):
     slug: Mapped[str] = mapped_column(TEXT, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
     active: Mapped[Optional[bool]] = mapped_column(BIT, nullable=True, default=True)
+    grabbag: Mapped[Optional[bool]] = mapped_column(BIT, nullable=True, default=False)
+
 
     archetype_obj: Mapped["Archetype"] = relationship(back_populates="modes")
     pingableRoles: Mapped[List["PingableModeRole"]] = relationship(
@@ -59,7 +61,7 @@ class Race(Base):
     )
     spoilerUrl: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
 
-    rolledMode: Mapped[Optional["Mode"]] = relationship("Mode", foreign_keys=[mode])
+    rolledMode: Mapped[Optional["Mode"]] = relationship(back_populates="firedRaces")
     scheduledRace: Mapped["ScheduledRace"] = relationship(back_populates="race")
     partitionedRaces: Mapped[List["PartitionedRace"]] = relationship(
         back_populates="parentRace",

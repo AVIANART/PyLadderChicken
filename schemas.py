@@ -142,6 +142,7 @@ class ModeWrite(BaseModel):
     slug: str
     description: Optional[str] = None
     active: Optional[bool] = True
+    grabbag: Optional[bool] = False
 
     class Config:
         from_attributes = True

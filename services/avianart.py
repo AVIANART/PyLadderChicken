@@ -99,7 +99,7 @@ class AvianartService:
         self.logger: logging.Logger = logging.getLogger("avianart")
 
     async def generate_seed(
-        self, preset: str, race: bool, namespace: str = "", spoiler: bool = False
+        self, preset: str, race: bool, namespace: str = "", spoiler: bool = False, mystery: bool = False
     ) -> AvianartGenPayload:
         """
         Trigger seed generation from AVIANART.
@@ -116,6 +116,11 @@ class AvianartService:
 
         if spoiler:
             seed_params["race_spoiler"] = spoiler
+
+        if mystery:
+            seed_params["hide_meta"] = True
+            seed_params["hide_title"] = True
+
 
         preset = preset.lower()
         if namespace:

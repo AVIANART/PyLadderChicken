@@ -13,6 +13,7 @@ import hikari
 from services.avianart import AvianResponsePayload
 import app_context as ac
 from config import import_config
+from utils.grabbag_utils import get_grabbag_mode_weights, select_grabbag_mode_from_weights
 from utils.spoiler_utils import avianart_payload_to_spoiler
 
 if TYPE_CHECKING:
@@ -121,24 +122,40 @@ async def roll_seed(race_id: int):
         logger.error(f"Cannot roll seed! Race {sched_race.id} does not have a race room.")
         return
     
-    race = ac.database_service.get_race_by_id(sched_race.raceId)
+    if sched_race.mode_obj.slug == 'ladder/grabbag':
+        # grabbag handling here
+        weights = get_grabbag_mode_weights(sched_race)
+        mode_id = select_grabbag_mode_from_weights(weights)
+        mode = ac.database_service.get_mode_by_id(mode_id)
+
+        all_modes = {x.id: x.name for x in ac.database_service.get_modes()}
+
+        await ac.discord_service.send_message(
+            content=f"|| {mode.name:-^50} || has been selected for this grabbag race!\n|| Mode weights were: {', '.join([f'{all_modes[mode_id]}: {weight:.2f}' for mode_id, weight in weights.items()])} ||"
+        )
+
+        race = ac.database_service.set_rolled_race_mode(sched_race.raceId, mode.id)
+    else:
+        race = ac.database_service.set_rolled_race_mode(sched_race.raceId, sched_race.mode_obj.id)
+
+    namespace = race.rolledMode.slug.split("/")[0] if "/" in race.rolledMode.slug else None
+    slug = (
+        race.rolledMode.slug.split("/")[1]
+        if "/" in race.rolledMode.slug
+        else race.rolledMode.slug
+    )
 
     room_name = race.raceRoom.lstrip("/")
-
-    namespace = sched_race.mode_obj.slug.split("/")[0] if "/" in sched_race.mode_obj.slug else None
-    slug = (
-        sched_race.mode_obj.slug.split("/")[1]
-        if "/" in sched_race.mode_obj.slug
-        else sched_race.mode_obj.slug
-    )
+    
     seed_info = await ac.avianart_service.generate_seed(
         slug,
         True,
         namespace=namespace,
-        spoiler=True if sched_race.mode_obj.archetype_obj.spoiler else False,
+        spoiler=True if race.rolledMode.archetype_obj.spoiler else False,
+        mystery=True if sched_race.mode_obj.slug == 'ladder/grabbag' else False,
     )
 
-    if sched_race.mode_obj.archetype_obj.spoiler:
+    if race.rolledMode.archetype_obj.spoiler:
         spoiler_name = avianart_payload_to_spoiler(seed_info, race.id, upload=True)
         if spoiler_name:
             await ac.discord_service.send_message(
