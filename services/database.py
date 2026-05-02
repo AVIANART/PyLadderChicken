@@ -198,7 +198,7 @@ class DatabaseService:
                 db.query(models.Role).filter(models.Role.roleName == "all").first()
             )
 
-            all_roles = [role.role for role in roles]
+            all_roles = [role.role for role in roles if role.role is not None]
             if default_role and default_role not in all_roles:
                 all_roles.append(default_role)
             return all_roles
@@ -452,20 +452,24 @@ class DatabaseService:
             return db_pingable
 
     def add_pingable_mode_role(self, pingable_role: schemas.PingableModeRoleWrite):
-        self.get_or_create_role(pingable_role.roleId, pingable_role.roleName)
+        # PingableModeRole.roleId FKs to Role.roleName, so we store the roleName
+        # (not the discord snowflake) in the link row's roleId column.
+        role = self.get_or_create_role(pingable_role.roleId, pingable_role.roleName)
+        link_role_id = role.roleName
         with Session(self.engine) as db:
             existing = (
                 db.query(models.PingableModeRole)
                 .filter(
                     models.PingableModeRole.modeId == pingable_role.modeId,
-                    models.PingableModeRole.roleId == pingable_role.roleId,
+                    models.PingableModeRole.roleId == link_role_id,
                 )
                 .first()
             )
             if existing:
                 return existing
             db_pingable = models.PingableModeRole(
-                **pingable_role.model_dump(exclude={"roleName"})
+                modeId=pingable_role.modeId,
+                roleId=link_role_id,
             )
             db.add(db_pingable)
             db.commit()
