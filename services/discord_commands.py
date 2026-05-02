@@ -1196,3 +1196,19 @@ class RemoveModesFromGrabbag(
                 await ctx.respond(f"Modes {', '.join([mode_name[mode_id] for mode_id in not_in_grabbag])} were not in the grabbag pool and were skipped.")
         else:
             await ctx.respond("No valid mode IDs provided to remove from the grabbag pool.", ephemeral=True)
+
+@loader.command()
+class PrintGrabBagPool(
+    lightbulb.SlashCommand,
+    name="print_grabbag_pool",
+    description="Print the current modes in the grabbag pool.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        grabbag_modes = ac.database_service.get_grabbag_enabled_modes()
+        if grabbag_modes:
+            mode_list = "\n".join(f"- **[{mode.archetype_obj.name}] {mode.name}** (ID: {mode.id}, slug: `{mode.slug}`)" for mode in grabbag_modes)
+            await ctx.respond(f"Current modes in the grabbag pool:\n{mode_list}")
+        else:
+            await ctx.respond("The grabbag pool is currently empty.")
