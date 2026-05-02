@@ -97,6 +97,9 @@ class DatabaseService:
                 .options(
                     selectinload(models.ScheduledRace.mode_obj).selectinload(
                         models.Mode.archetype_obj
+                    ),
+                    selectinload(models.ScheduledRace.race).selectinload(
+                        models.Race.rolledMode).selectinload(models.Mode.archetype_obj
                     )
                 )
                 .filter(models.ScheduledRace.id == race_id)

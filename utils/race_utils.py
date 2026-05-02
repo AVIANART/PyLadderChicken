@@ -407,10 +407,17 @@ async def force_start_race(
             for job in race_jobs:
                 ac.scheduler_service.scheduler.remove_job(job.id)
 
+        if sched_race.mode_obj.slug == 'ladder/grabbag':
+            await post_grabbag_mode(race_id, past=True)
+
         await race_handler.cancel_race()
         return
-
+    
     await race_handler.send_message("Force starting race! Get ready!")
+    
+    if sched_race.mode_obj.slug == 'ladder/grabbag':
+        await post_grabbag_mode(race_id, past=False)
+
     try:
         await race_handler.force_start()
     except Exception as e:
@@ -425,6 +432,7 @@ async def force_start_race(
         )
     post_race_channel_id = ac.database_service.get_setting("post_race_channel_id")
 
+
     if post_race_channel_id and not suppress_post_race_message:
         thread: hikari.GuildThreadChannel = (
             await ac.discord_service.bot.rest.create_thread(
@@ -435,6 +443,9 @@ async def force_start_race(
         )
 
         await thread.send(f"_{random.choice(random_post_race_messages)}_")
+        if sched_race.mode_obj.slug == 'ladder/grabbag':
+            mode = sched_race.race.rolledMode
+            await thread.send(f"The selected grabbag mode for this race was: **[{mode.archetype_obj.name}] {mode.name}**!")
 
 
 async def post_prep_time_left(
@@ -506,6 +517,29 @@ async def post_spoiler(
         await race_handler.send_message(
             f"{prep_time_minutes} minutes of prep time starts now! A message will be posted when you can start the seed!",
         )
+
+
+async def post_grabbag_mode(
+    race_id: int,
+    past: bool = False,
+):
+    sched_race = ac.database_service.get_scheduled_race_by_id(race_id)
+    room_name = ac.database_service.get_race_by_id(sched_race.raceId).raceRoom.lstrip("/")
+
+    race_handler: LadderRaceHandler = ac.racetime_service.handler_objects.get(
+        room_name, None
+    )
+
+    if not race_handler:
+        logger.error(f"post_grabbag_mode: No handler found for room: {room_name}")
+        return
+    
+    mode = sched_race.race.rolledMode
+    
+    await race_handler.send_message(f"The selected grabbag mode for this race {'is' if not past else 'was'}: [{mode.archetype_obj.name}] {mode.name}! ")
+
+    if not past:
+        await race_handler.send_message(f"The selected grabbag mode for this race is: **[{mode.archetype_obj.name}] {mode.name}**!", pinned=True)
 
 
 def get_schedule_message(num_races: int = 10) -> str:
