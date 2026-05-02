@@ -415,10 +415,6 @@ class DatabaseService:
                 .first()
             )
             if role:
-                if role_name and role.roleName != role_name:
-                    role.roleName = role_name
-                    db.commit()
-                    db.refresh(role)
                 return role
             role = models.Role(roleId=role_id, roleName=role_name or role_id)
             db.add(role)
