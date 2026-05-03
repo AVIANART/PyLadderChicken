@@ -88,8 +88,8 @@ async def open_race_room(race_id: int):
         race_kwargs["partitionable"] = True
         # race_kwargs['hide_entrants'] = True
 
-    # if race.mode_obj.archetype_obj.spoiler:
-    #     race_kwargs["start_delay"] = 15 + (15 * 60)  # 15 min delay for spoiler for prep time
+    if sched_race.mode_obj.slug == 'ladder/grabbag':
+        race_kwargs["start_delay"] = 60  # 1 minute start delay for grabbag to allow racers to see the mode before starting the seed
 
     room_name = await ac.racetime_service.start_race(
         # We use info_user because it will be concatenated with info_bot later

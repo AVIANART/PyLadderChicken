@@ -123,11 +123,12 @@ class APSchedulerService:
             ),
         )
 
-        if not race.mode_obj.archetype_obj.ladder:
+        # Grabbag path - has a 1 minute ping and start to allow racers to see the mode before starting the seed
+        if race.mode_obj.slug == 'ladder/grabbag':
             self.scheduler.add_job(
                 race_utils.ping_unready,
                 trigger=DateTrigger(
-                    race_utc_datetime - datetime.timedelta(minutes=1),
+                    race_utc_datetime - datetime.timedelta(minutes=2),
                     timezone=utc,
                 ),
                 args=(race_id,),
@@ -138,14 +139,15 @@ class APSchedulerService:
             self.scheduler.add_job(
                 race_utils.force_start_race,
                 trigger=DateTrigger(
-                    race_utc_datetime - datetime.timedelta(seconds=15),
+                    race_utc_datetime - datetime.timedelta(minutes=1),
                     timezone=utc,
                 ),
                 kwargs={"race_id": race_id},
                 id=f"force_start_{race_id}",
                 replace_existing=True,
             )
-        else:
+        # Ladder path - partitioning
+        elif race.mode_obj.archetype_obj.ladder:
             self.scheduler.add_job(
                 race_utils.warn_partitioned_race,
                 trigger=DateTrigger(
@@ -164,6 +166,29 @@ class APSchedulerService:
                     timezone=utc,
                 ),
                 args=(race_id,),
+                id=f"force_start_{race_id}",
+                replace_existing=True,
+            )
+        # Normal path
+        else:
+            self.scheduler.add_job(
+                race_utils.ping_unready,
+                trigger=DateTrigger(
+                    race_utc_datetime - datetime.timedelta(minutes=1),
+                    timezone=utc,
+                ),
+                args=(race_id,),
+                id=f"ping_unready_{race_id}",
+                replace_existing=True,
+            )
+
+            self.scheduler.add_job(
+                race_utils.force_start_race,
+                trigger=DateTrigger(
+                    race_utc_datetime - datetime.timedelta(seconds=15),
+                    timezone=utc,
+                ),
+                kwargs={"race_id": race_id},
                 id=f"force_start_{race_id}",
                 replace_existing=True,
             )

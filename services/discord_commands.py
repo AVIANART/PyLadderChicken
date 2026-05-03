@@ -1212,3 +1212,17 @@ class PrintGrabBagPool(
             await ctx.respond(f"Current modes in the grabbag pool:\n{mode_list}")
         else:
             await ctx.respond("The grabbag pool is currently empty.")
+
+
+@loader.command()
+class UpdateScheduleCommand(
+    lightbulb.SlashCommand,
+    name="update_schedule",
+    description="Manually trigger a pull of new scheduled races and update the schedule message.",
+    default_member_permissions=hikari.Permissions.NONE,
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        await ctx.defer(ephemeral=True)
+        await race_utils.schedule_future_races()
+        await ctx.respond("Schedule updated with future races.", ephemeral=True)
