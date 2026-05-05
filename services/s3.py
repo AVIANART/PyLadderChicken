@@ -13,7 +13,15 @@ class S3Service:
 
     def upload_file(self, file_path, object_name):
         try:
-            self.s3_client.upload_file(file_path, self.bucket_name, object_name)
+            self.s3_client.upload_file(
+                file_path, 
+                self.bucket_name, 
+                object_name,
+                # ExtraArgs to force download in the browser instead of opening in a new tab
+                ExtraArgs= {
+                    'ContentType': 'application/octet-stream',
+                    'ContentDisposition': f'attachment; filename="{object_name}"'
+                })
             return True
         except Exception as e:
             print(f"Error uploading file to S3: {e}")
