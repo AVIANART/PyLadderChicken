@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 from typing import TYPE_CHECKING
 import zoneinfo
 import datetime
@@ -88,28 +89,51 @@ async def open_race_room(race_id: int):
         race_kwargs["partitionable"] = True
         # race_kwargs['hide_entrants'] = True
 
+    selected_grabbag_mode = None
+    grabbag_weights = None
     if sched_race.mode_obj.slug == 'ladder/grabbag':
         race_kwargs["start_delay"] = 60  # 1 minute start delay for grabbag to allow racers to see the mode before starting the seed
+        grabbag_weights = get_grabbag_mode_weights(sched_race)
+        mode_id = select_grabbag_mode_from_weights(grabbag_weights)
+        selected_grabbag_mode = ac.database_service.get_mode_by_id(mode_id)
+
+    mode_label = sched_race.mode_obj.name
+    if selected_grabbag_mode:
+        mode_label = f"{sched_race.mode_obj.name} ({selected_grabbag_mode.name})"
 
     room_name = await ac.racetime_service.start_race(
         # We use info_user because it will be concatenated with info_bot later
-        info_user=f"Step Ladder Series - [{sched_race.mode_obj.archetype_obj.name}] - {sched_race.mode_obj.name}",
+        info_user=f"Step Ladder Series - [{sched_race.mode_obj.archetype_obj.name}] - {mode_label}",
         **race_kwargs,
     )
 
     races_channel_id = ac.database_service.get_setting("races_channel_id")
-    message = f"{roles_str}\n**[{sched_race.mode_obj.archetype_obj.name}] {sched_race.mode_obj.name}** -- {ac.racetime_service.get_raceroom_url(room_name)} -- <t:{int(delta_ts)}:R>"
+    message = f"{roles_str}\n**[{sched_race.mode_obj.archetype_obj.name}] {mode_label}** -- {ac.racetime_service.get_raceroom_url(room_name)} -- <t:{int(delta_ts)}:R>"
     if sched_race.mode_obj.archetype_obj.ladder:
         message += (
             f"\n**This is a 1v1 ladder race using the partitioning system in rt.gg**"
         )
     if races_channel_id:
-        await ac.discord_service.send_message(
+        races_message = await ac.discord_service.send_message(
             content=message, channel_id=races_channel_id
         )
+        if races_message:
+            ac.database_service.set_setting(
+                f"races_channel_message_{race_id}", int(races_message.id)
+            )
     await ac.discord_service.send_message(content=message)
 
-    ac.database_service.add_fired_race(room_name, sched_race)
+    fired_race = ac.database_service.add_fired_race(room_name, sched_race)
+    if selected_grabbag_mode:
+        ac.database_service.set_rolled_race_mode(fired_race.id, selected_grabbag_mode.id)
+        all_modes = {x.id: x.name for x in ac.database_service.get_modes()}
+        await ac.discord_service.send_message(
+            content=(
+                f"{selected_grabbag_mode.name} has been selected for this grabbag race!\n"
+                f"Mode weights were: {', '.join([f'{all_modes[mid]}: {weight:.2f}' for mid, weight in grabbag_weights.items()])}"
+            )
+        )
+
     await update_schedule_message()
     return room_name
 
@@ -123,20 +147,14 @@ async def roll_seed(race_id: int):
     if not sched_race.raceId:
         logger.error(f"Cannot roll seed! Race {sched_race.id} does not have a race room.")
         return
-    
+
     if sched_race.mode_obj.slug == 'ladder/grabbag':
-        # grabbag handling here
-        weights = get_grabbag_mode_weights(sched_race)
-        mode_id = select_grabbag_mode_from_weights(weights)
-        mode = ac.database_service.get_mode_by_id(mode_id)
-
-        all_modes = {x.id: x.name for x in ac.database_service.get_modes()}
-
-        await ac.discord_service.send_message(
-            content=f"|| {mode.name:-^50} || has been selected for this grabbag race!\n|| Mode weights were: {', '.join([f'{all_modes[mode_id]}: {weight:.2f}' for mode_id, weight in weights.items()])} ||"
-        )
-
-        race = ac.database_service.set_rolled_race_mode(sched_race.raceId, mode.id)
+        race = ac.database_service.get_race_by_id(sched_race.raceId)
+        if not race or not race.rolledMode:
+            logger.error(
+                f"Cannot roll seed! Grabbag race {sched_race.id} does not have a selected mode."
+            )
+            return
     else:
         race = ac.database_service.set_rolled_race_mode(sched_race.raceId, sched_race.mode_obj.id)
 
@@ -224,6 +242,12 @@ async def roll_seed(race_id: int):
         )
         await race_handler.set_bot_raceinfo(
             f"{sched_race.mode_obj.slug} - https://alttpr.racing/getseed.php?race={sched_race.raceId} - ({hash_str})"
+        )
+        await update_races_channel_with_seed(
+            scheduled_race_id=race_id,
+            room_name=room_name,
+            race_db_id=sched_race.raceId,
+            hash_str=hash_str,
         )
     else:
         logger.error(f"No handler found for room: {room_name}")
@@ -552,11 +576,20 @@ def get_schedule_message(num_races: int = 10) -> str:
     schedule = [previous_race] + upcoming_races
 
     for n, entry in enumerate(schedule):
-        content += f"<t:{int(entry.time.replace(tzinfo=est).timestamp())}:f> (<t:{int(entry.time.replace(tzinfo=est).timestamp())}:R>) - **{entry.mode_obj.name}**"
-        if entry.mode_obj.archetype_obj.ladder:
-            content += " (1v1)"
+        mode_name = entry.mode_obj.name
+        race = None
         if entry.raceId != -1 and entry.raceId is not None:
             race = ac.database_service.get_race_by_id(entry.raceId)
+            if (
+                entry.mode_obj.slug == "ladder/grabbag"
+                and race
+                and race.rolledMode
+            ):
+                mode_name = f"{entry.mode_obj.name} ({race.rolledMode.name})"
+        content += f"<t:{int(entry.time.replace(tzinfo=est).timestamp())}:f> (<t:{int(entry.time.replace(tzinfo=est).timestamp())}:R>) - **{mode_name}**"
+        if entry.mode_obj.archetype_obj.ladder:
+            content += " (1v1)"
+        if race is not None:
             content += f" - {ac.racetime_service.get_raceroom_url(race.raceRoom)}"
         if n < len(schedule) - 1:
             content += "\n"
@@ -610,6 +643,93 @@ def estnow() -> datetime.datetime:
     Returns the current time in EST.
     """
     return datetime.datetime.now(est)
+
+
+SEED_LINK_RE = re.compile(
+    r"https://alttpr\.racing/getseed\.php\?race=\d+ - \([^)]*\)"
+)
+
+
+def format_seed_link(race_db_id: int, hash_str: str) -> str:
+    # Racetime uses Hash-prefixed item names (HashBombs). Discord only needs the item.
+    discord_hash = "/".join(item.replace("Hash", "") for item in hash_str.split("/"))
+    return f"https://alttpr.racing/getseed.php?race={race_db_id} - ({discord_hash})"
+
+
+def insert_seed_after_racetime_link(
+    content: str, raceroom_url: str, seed_text: str
+) -> str:
+    """
+    Places the getseed link and hash immediately after the racetime room URL.
+    Replaces an existing getseed segment when the seed is rolled again.
+    """
+    if SEED_LINK_RE.search(content):
+        return SEED_LINK_RE.sub(seed_text, content, count=1)
+    if raceroom_url and raceroom_url in content:
+        return content.replace(raceroom_url, f"{raceroom_url} -- {seed_text}", 1)
+    return f"{content.rstrip()}\n{seed_text}"
+
+
+async def update_races_channel_with_seed(
+    scheduled_race_id: int,
+    room_name: str,
+    race_db_id: int,
+    hash_str: str,
+) -> None:
+    """
+    Edits the #races announcement so the getseed link and hash follow the racetime link.
+    """
+    try:
+        races_channel_id = ac.database_service.get_setting("races_channel_id")
+        if not races_channel_id:
+            logger.error(
+                "Cannot update races channel with seed: races_channel_id is not set."
+            )
+            return
+
+        raceroom_url = ac.racetime_service.get_raceroom_url(room_name)
+        seed_text = format_seed_link(race_db_id, hash_str)
+
+        message = None
+        message_id = ac.database_service.get_setting(
+            f"races_channel_message_{scheduled_race_id}"
+        )
+        if message_id:
+            try:
+                message = await ac.discord_service.bot.rest.fetch_message(
+                    races_channel_id, int(message_id)
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to fetch races channel message {message_id} for race {scheduled_race_id}: {e}"
+                )
+
+        if message is None:
+            message = await ac.discord_service.find_recent_message(
+                races_channel_id, raceroom_url
+            )
+
+        if message is None or not message.content:
+            logger.error(
+                f"Could not find races channel message for race {scheduled_race_id} ({raceroom_url})."
+            )
+            return
+
+        new_content = insert_seed_after_racetime_link(
+            message.content, raceroom_url, seed_text
+        )
+        if new_content == message.content:
+            return
+
+        await ac.discord_service.bot.rest.edit_message(
+            channel=races_channel_id,
+            message=message.id,
+            content=new_content[:2000],
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to edit races channel message for race {scheduled_race_id}: {e}"
+        )
 
 
 def seed_response_to_hash(response: AvianResponsePayload) -> str:

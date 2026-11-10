@@ -275,6 +275,9 @@ class DatabaseService:
             scheduled_race_update.raceId = race.id
             db.add(scheduled_race_update)
             db.commit()
+            # expire_on_commit leaves attributes expired; refresh while still
+            # bound so callers can safely read race.id after the session closes
+            db.refresh(race)
             return race
 
     def get_race_by_id(self, race_id: int):

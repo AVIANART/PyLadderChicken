@@ -520,6 +520,12 @@ class SetRaceSeedCommand(
         await race_handler.set_bot_raceinfo(
             f"{race.mode_obj.slug} - https://alttpr.racing/getseed.php?race={race.raceId} - ({hash_str})"
         )
+        await race_utils.update_races_channel_with_seed(
+            scheduled_race_id=race.id,
+            room_name=room_name,
+            race_db_id=race.raceId,
+            hash_str=hash_str,
+        )
         updated_race = ac.database_service.update_race_seed(
             race.raceId, seed_info.response.hash
         )

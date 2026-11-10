@@ -91,6 +91,22 @@ class DiscordService:
         channel = await self.bot.rest.fetch_channel(channel_id)
         if channel:
             self.logger.info(f"Sending message to channel {channel_id}: {content}")
-            await channel.send(content[:2000], role_mentions=role_mentions, flags=messages.MessageFlag.SUPPRESS_EMBEDS if suppress_embeds else undefined.UNDEFINED)
+            return await channel.send(content[:2000], role_mentions=role_mentions, flags=messages.MessageFlag.SUPPRESS_EMBEDS if suppress_embeds else undefined.UNDEFINED)
         else:
             self.logger.error(f"Channel with ID {channel_id} not found.")
+            return None
+
+    async def find_recent_message(self, channel_id: int, text: str, limit: int = 50):
+        """
+        Returns the most recent message in a channel whose content contains `text`.
+        Prefers messages sent by this bot when the bot user is cached.
+        """
+        me = self.bot.get_me()
+        iterator = self.bot.rest.fetch_messages(channel_id).limit(limit)
+        async for message in iterator:
+            if not message.content or text not in message.content:
+                continue
+            if me is not None and message.author.id != me.id:
+                continue
+            return message
+        return None
