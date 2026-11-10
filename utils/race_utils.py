@@ -546,7 +546,7 @@ def get_schedule_message(num_races: int = 10) -> str:
     """
     Generates a message with the current schedule
     """
-    content = "**Step Ladder Schedule** (Times are local)\n"
+    content = "**Step Ladder Schedule** (Times are local)\nFull schedule: https://alttpr.racing/calendar\nUpcoming races:\n"
     upcoming_races = ac.database_service.get_future_scheduled_races(limit=num_races)
     previous_race = ac.database_service.get_previous_race()
     schedule = [previous_race] + upcoming_races
