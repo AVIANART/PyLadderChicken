@@ -10,6 +10,11 @@ import logging
 from racetime_bot import RaceHandler
 import app_context as ac
 from apscheduler.triggers.date import DateTrigger
+from config import import_config
+
+import requests
+
+config = import_config()
 
 
 WELCOME_MESSAGE = "Welcome to this Step Ladder race!"
@@ -32,6 +37,47 @@ class LadderRaceHandler(RaceHandler):
                 "user": user_id
             }
         }))
+
+    def trigger_stats_update(self):
+        stats_pat = config.get('stats_action_pat', '')
+
+        if not stats_pat:
+            self.logger.warning("Stats update skipped: No GitHub PAT provided")
+            return None
+
+        url = "https://api.github.com/repos/MichaelWolverineStream/racetimevibes/actions/workflows/update-data.yml/dispatches"
+
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {stats_pat}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        payload = {"ref": "main", "inputs": {"reason": "Pedchicken"}}
+
+        response = requests.post(url, headers=headers, json=payload)
+
+        self.logger.info(f"Stats update: GitHub API response status: {response.status_code}")
+        if response.content:
+            self.logger.info(f"Stats update: GitHub API response content: {response.json()}")
+
+        return response.status_code
+
+    async def end(self):
+        """
+        Bot actions to perform just before disconnecting from a race room.
+
+        Override this method to add an outro for when your bot leaves.
+        """
+        cur_status = self.data.get("status", {}).get("value")
+
+        self.logger.info(f"Ending race handler for race: {self.data.get('name')}")
+
+        if cur_status == 'finished':
+            self.logger.info(
+                f"Race complete, triggering stats update"
+            )
+            self.trigger_stats_update()
 
     async def ex_so(self, args, message):
         racers = {x['user']['id']: x for x in self.data['entrants']}

@@ -77,7 +77,7 @@ class ExtendedRacetimeBot(Bot):
         raise Exception(
             "Failed to open rt.gg room, no Location header found in response."
         )
-    
+
     # Override default refresh to gain access to unlisted rooms
     async def refresh_races(self):
         """
