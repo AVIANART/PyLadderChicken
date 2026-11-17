@@ -175,7 +175,7 @@ class OpenRoomCommand(
     lightbulb.SlashCommand,
     name="open_room",
     description="Open a room for a specific race ID.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     race_id = lightbulb.integer(
         "race_id",
@@ -196,7 +196,7 @@ class AddScheduledRaceCommand(
     lightbulb.SlashCommand,
     name="add_scheduled_race",
     description="Add a race to the schedule. USE EST TIMEZONE!",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
 
     mode = lightbulb.integer(
@@ -360,7 +360,7 @@ class ScheduleCommand(
     lightbulb.SlashCommand,
     name="schedule",
     description="Print the schedule message, will be updated automatically.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     num_races = lightbulb.integer(
         "num_races",
@@ -423,7 +423,7 @@ class DelayRaceCommand(
     lightbulb.SlashCommand,
     name="delay_race",
     description="Delay the start of a specific race.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     race_id = lightbulb.integer(
         "race_id",
@@ -472,7 +472,7 @@ class SetRaceSeedCommand(
     lightbulb.SlashCommand,
     name="set_race_seed",
     description="Set the seed for a specific race. LadderChicken will update the room with the seed.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     race_id = lightbulb.integer(
         "race_id",
@@ -554,7 +554,7 @@ class AddSaviorRoleCommand(
     lightbulb.SlashCommand,
     name="set_savior_role",
     description="Set a savior role to an archetype.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     archetype = lightbulb.string(
         "archetype",
@@ -602,7 +602,7 @@ class SetAllSaviorRolesCommand(
     lightbulb.SlashCommand,
     name="set_all_savior_roles",
     description="Set savior roles for all archetypes to the specified role.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     role = lightbulb.mentionable(
         "role",
@@ -721,7 +721,7 @@ class AddArchetypeCommand(
     lightbulb.SlashCommand,
     name="add_archetype",
     description="Add a new archetype, optionally with pingable roles.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     name = lightbulb.string("name", "The name of the archetype.")
     ladder = lightbulb.boolean(
@@ -782,7 +782,7 @@ class AddModeCommand(
     lightbulb.SlashCommand,
     name="add_mode",
     description="Add a new mode, optionally with pingable roles.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     archetype = lightbulb.integer(
         "archetype",
@@ -860,7 +860,7 @@ class AddPingableArchetypeRoleCommand(
     lightbulb.SlashCommand,
     name="add_pingable_archetype_role",
     description="Add a pingable role to an archetype.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     archetype = lightbulb.integer(
         "archetype",
@@ -906,7 +906,7 @@ class AddPingableModeRoleCommand(
     lightbulb.SlashCommand,
     name="add_pingable_mode_role",
     description="Add a pingable role to a mode.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     mode = lightbulb.integer(
         "mode",
@@ -952,7 +952,7 @@ class RemovePingableArchetypeRoleCommand(
     lightbulb.SlashCommand,
     name="remove_pingable_archetype_role",
     description="Remove a pingable role from an archetype.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     archetype = lightbulb.integer(
         "archetype",
@@ -993,7 +993,7 @@ class RemovePingableModeRoleCommand(
     lightbulb.SlashCommand,
     name="remove_pingable_mode_role",
     description="Remove a pingable role from a mode.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     mode = lightbulb.integer(
         "mode",
@@ -1031,7 +1031,7 @@ class SetSpoilerUrl(
     lightbulb.SlashCommand,
     name="set_spoiler_url",
     description="Set the spoiler URL for a race.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     race_id = lightbulb.integer(
         "race_id",
@@ -1057,7 +1057,7 @@ class SetGrabbagDecayPercentage(
     lightbulb.SlashCommand,
     name="set_grabbag_decay_percentage",
     description="Set the decay percentage for grabbag mode selection.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     decay_percentage = lightbulb.number(
         "decay_percentage",
@@ -1077,7 +1077,7 @@ class AddModesToGrabbag(
     lightbulb.SlashCommand,
     name="add_modes_to_grabbag",
     description="Add modes to the grabbag pool.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     mode1 = lightbulb.string(
         "mode1",
@@ -1143,7 +1143,7 @@ class RemoveModesFromGrabbag(
     lightbulb.SlashCommand,
     name="remove_modes_from_grabbag",
     description="Remove modes from the grabbag pool.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     mode1 = lightbulb.string(
         "mode1",
@@ -1208,7 +1208,7 @@ class PrintGrabBagPool(
     lightbulb.SlashCommand,
     name="print_grabbag_pool",
     description="Print the current modes in the grabbag pool.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -1225,7 +1225,7 @@ class UpdateScheduleCommand(
     lightbulb.SlashCommand,
     name="update_schedule",
     description="Manually trigger a pull of new scheduled races and update the schedule message.",
-    default_member_permissions=hikari.Permissions.NONE,
+    default_member_permissions=hikari.Permissions.ADMINISTRATOR,
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
